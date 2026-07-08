@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import {
+  LayoutDashboard,
   FileText,
   AlertTriangle,
   BarChart3,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 
 const navItems = [
+  { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
   { href: '/dashboard/requests', label: 'Billing Requests', icon: FileText },
   { href: '/dashboard/messenger', label: 'Messenger', icon: MessageSquare },
   { href: '/dashboard/customers', label: 'Customers', icon: Users },
@@ -42,7 +44,7 @@ export function Sidebar({ currentPath }: { currentPath: string }) {
       <nav className="flex-1 p-3 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;
-          const isActive = currentPath.startsWith(item.href);
+          const isActive = item.exact ? currentPath === item.href : currentPath.startsWith(item.href);
           return (
             <Link
               key={item.href}

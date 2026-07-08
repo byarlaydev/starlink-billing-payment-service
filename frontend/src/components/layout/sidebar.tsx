@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { cn } from '@/lib/utils';
 import {
-  LayoutDashboard,
   FileText,
   AlertTriangle,
   BarChart3,
@@ -18,6 +17,7 @@ import {
 
 const navItems = [
   { href: '/dashboard/requests', label: 'Billing Requests', icon: FileText },
+  { href: '/dashboard/messenger', label: 'Messenger', icon: MessageSquare },
   { href: '/dashboard/customers', label: 'Customers', icon: Users },
   { href: '/dashboard/starlink-accounts', label: 'Starlink Accounts', icon: Satellite },
   { href: '/dashboard/region-plan', label: 'Regions & Plans', icon: Globe },

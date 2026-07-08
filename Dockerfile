@@ -40,9 +40,9 @@ COPY --from=backend-builder /app/node_modules/@prisma ./backend/node_modules/@pr
 COPY backend/prisma ./backend/prisma
 
 # Copy frontend build
-COPY --from=frontend-builder /app/frontend/.next/standalone ./frontend
-COPY --from=frontend-builder /app/frontend/.next/static ./frontend/.next/static
-COPY --from=frontend-builder /app/frontend/public ./frontend/public
+COPY --from=frontend-builder /app/.next/standalone ./frontend
+COPY --from=frontend-builder /app/.next/static ./frontend/.next/static
+COPY --from=frontend-builder /app/public ./frontend/public
 
 # Install PM2 for process management
 RUN npm install -g pm2

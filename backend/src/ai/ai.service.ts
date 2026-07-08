@@ -3,17 +3,20 @@ import { ConfigService } from '@nestjs/config';
 import { AIProvider, AIProviderConfig, ChatMessage, ChatResponse, OCRResult, IntentResult } from './interfaces/ai-provider.interface';
 import { GeminiProvider } from './providers/gemini.provider';
 import { KnowledgeBaseService } from '../modules/knowledge-base/knowledge-base.service';
+import { SettingsService } from '../modules/settings/settings.service';
 import { Language } from '@prisma/client';
 
 @Injectable()
 export class AIService {
   private readonly logger = new Logger(AIService.name);
   private currentProvider: AIProvider;
+  private configCache: Partial<AIProviderConfig> | null = null;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly geminiProvider: GeminiProvider,
     private readonly knowledgeBaseService: KnowledgeBaseService,
+    private readonly settingsService: SettingsService,
   ) {
     this.currentProvider = this.geminiProvider;
   }
@@ -25,6 +28,38 @@ export class AIService {
   setProvider(provider: AIProvider): void {
     this.currentProvider = provider;
     this.logger.log(`AI provider switched to: ${provider.name}`);
+  }
+
+  private async loadDbConfig(): Promise<Partial<AIProviderConfig>> {
+    if (this.configCache) return this.configCache;
+    try {
+      const [apiKey, model, temperature, maxTokens] = await Promise.all([
+        this.settingsService.getDecrypted('ai', 'gemini_api_key'),
+        this.settingsService.get('ai', 'gemini_model'),
+        this.settingsService.get('ai', 'temperature'),
+        this.settingsService.get('ai', 'max_output_tokens'),
+      ]);
+      this.configCache = {
+        apiKey: apiKey || undefined,
+        model: model || undefined,
+        temperature: temperature ? parseFloat(temperature) : undefined,
+        maxOutputTokens: maxTokens ? parseInt(maxTokens, 10) : undefined,
+      };
+    } catch (err) {
+      this.logger.warn('Failed to load AI config from DB settings', err);
+      this.configCache = {};
+    }
+    return this.configCache;
+  }
+
+  invalidateConfigCache(): void {
+    this.configCache = null;
+  }
+
+  async getEffectiveConfig(): Promise<AIProviderConfig> {
+    const envConfig = this.getDefaultConfig();
+    const dbConfig = await this.loadDbConfig();
+    return { ...envConfig, ...dbConfig };
   }
 
   getDefaultConfig(): AIProviderConfig {
@@ -58,7 +93,8 @@ export class AIService {
       }
     }
     
-    return this.currentProvider.chat(messages);
+    const config = await this.getEffectiveConfig();
+    return this.currentProvider.chat(messages, config);
   }
 
   async extractPaymentProof(imageBuffer: Buffer, mimeType: string): Promise<OCRResult> {

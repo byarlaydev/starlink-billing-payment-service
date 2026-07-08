@@ -20,18 +20,23 @@ export class PlaygroundController {
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
   @ApiOperation({ summary: 'Send a message to the AI bot playground' })
   async chat(@Body() body: { message: string; language?: 'EN' | 'MY' }) {
-    const language = body.language === 'MY' ? Language.MY : Language.EN;
-    const systemPrompt = SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
+    try {
+      const language = body.language === 'MY' ? Language.MY : Language.EN;
+      const systemPrompt = SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
 
-    const response = await this.aiService.chat(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: body.message },
-      ],
-      body.message,
-      language,
-    );
+      const response = await this.aiService.chat(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: body.message },
+        ],
+        body.message,
+        language,
+      );
 
-    return { success: true, data: response };
+      return { success: true, data: response };
+    } catch (error: any) {
+      this.logger.error(`Playground chat failed: ${error.message}`, error.stack);
+      throw error;
+    }
   }
 }

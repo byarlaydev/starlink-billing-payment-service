@@ -9,6 +9,7 @@ RUN npm ci
 COPY backend/ ./
 RUN npx prisma generate
 RUN npm run build
+RUN npx tsc prisma/seed.ts --outDir prisma --esModuleInterop --skipLibCheck
 
 # Build stage for frontend
 FROM node:20-alpine AS frontend-builder

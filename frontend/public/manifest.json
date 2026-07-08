@@ -1,0 +1,9 @@
+{
+  "name": "Starlink Billing Assistance",
+  "short_name": "Billing Assist",
+  "description": "Independent third-party Starlink billing assistance service",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#3b82f6"
+}

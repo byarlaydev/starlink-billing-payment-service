@@ -10,7 +10,6 @@ import { Language } from '@prisma/client';
 export class AIService {
   private readonly logger = new Logger(AIService.name);
   private currentProvider: AIProvider;
-  private configCache: Partial<AIProviderConfig> | null = null;
 
   constructor(
     private readonly configService: ConfigService,
@@ -31,7 +30,6 @@ export class AIService {
   }
 
   private async loadDbConfig(): Promise<Partial<AIProviderConfig>> {
-    if (this.configCache) return this.configCache;
     try {
       const [apiKey, model, temperature, maxTokens] = await Promise.all([
         this.settingsService.getDecrypted('ai', 'gemini_api_key'),
@@ -39,7 +37,7 @@ export class AIService {
         this.settingsService.get('ai', 'temperature'),
         this.settingsService.get('ai', 'max_output_tokens'),
       ]);
-      this.configCache = {
+      return {
         apiKey: apiKey || undefined,
         model: model || undefined,
         temperature: temperature ? parseFloat(temperature) : undefined,
@@ -47,13 +45,8 @@ export class AIService {
       };
     } catch (err) {
       this.logger.warn('Failed to load AI config from DB settings', err);
-      this.configCache = {};
+      return {};
     }
-    return this.configCache;
-  }
-
-  invalidateConfigCache(): void {
-    this.configCache = null;
   }
 
   async getEffectiveConfig(): Promise<AIProviderConfig> {

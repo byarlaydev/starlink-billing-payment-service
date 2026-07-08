@@ -225,7 +225,7 @@ export default function DashboardPage() {
           },
           {
             label: 'Starlink Accounts', value: accountStats?.total ?? 0,
-            sub: `${accountStats?.active ?? 0} active · ${accountStats?.primary ?? 0} primary`,
+            sub: `${accountStats?.total ?? 0} registered`,
             href: '/dashboard/starlink-accounts', icon: Satellite, color: 'bg-purple-50 text-purple-600',
           },
           {

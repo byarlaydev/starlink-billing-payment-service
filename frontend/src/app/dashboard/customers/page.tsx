@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
-import { Search, CheckCircle, XCircle, MessageSquare, UserPlus, Satellite, Star, ExternalLink } from 'lucide-react';
+import { Search, CheckCircle, XCircle, MessageSquare, UserPlus, Satellite, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select } from '@/components/ui/select';
 
@@ -14,7 +14,6 @@ interface RegionPlan {
   description: string | null;
   price: number | null;
   currency: string;
-  isActive: boolean;
 }
 
 interface StarlinkAccount {
@@ -25,8 +24,6 @@ interface StarlinkAccount {
   password: string | null;
   regionPlanId: string | null;
   serviceAddress: string | null;
-  isPrimary: boolean;
-  isActive: boolean;
   notes: string | null;
   createdAt: string;
   regionPlan: RegionPlan | null;
@@ -376,7 +373,6 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
         regionPlanId: newAccount.regionPlanId || undefined,
         serviceAddress: newAccount.serviceAddress || undefined,
         notes: newAccount.notes || undefined,
-        isPrimary: accounts.length === 0,
       });
       toast.success('Starlink account added');
       setNewAccount({ accountName: '', accountNumber: '', email: '', password: '', regionPlanId: '', serviceAddress: '', notes: '' });
@@ -388,18 +384,6 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
       toast.error('Failed to add account');
     } finally {
       setSubmitting(false);
-    }
-  };
-
-  const handleSetPrimary = async (accountId: string) => {
-    try {
-      await api.put(`/starlink-accounts/${accountId}/set-primary`);
-      toast.success('Primary account updated');
-      const res = await api.get(`/starlink-accounts/customer/${customer.id}`);
-      setAccounts(res.data.data);
-      onRefresh();
-    } catch (err) {
-      toast.error('Failed to update primary account');
     }
   };
 
@@ -606,22 +590,13 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
                 {accounts.map((account) => (
                   <div
                     key={account.id}
-                    className={cn(
-                      'flex items-center justify-between p-3 rounded-lg border',
-                      account.isPrimary ? 'border-primary-200 bg-primary-50' : 'border-gray-200 bg-white'
-                    )}
+                    className="flex items-center justify-between p-3 rounded-lg border border-gray-200 bg-white"
                   >
                     <div className="flex items-center gap-3">
-                      <Satellite className={cn('w-4 h-4', account.isPrimary ? 'text-primary-600' : 'text-gray-400')} />
+                      <Satellite className="w-4 h-4 text-gray-400" />
                       <div>
                         <div className="flex items-center gap-2">
                           <span className="text-sm font-medium">{account.accountName}</span>
-                          {account.isPrimary && (
-                            <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
-                          )}
-                          {!account.isActive && (
-                            <span className="px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">Inactive</span>
-                          )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
                           <span>#{account.accountNumber}</span>
@@ -636,15 +611,6 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
                       </div>
                     </div>
                     <div className="flex items-center gap-1">
-                      {!account.isPrimary && (
-                        <button
-                          onClick={() => handleSetPrimary(account.id)}
-                          className="p-1.5 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded"
-                          title="Set as primary"
-                        >
-                          <Star className="w-4 h-4" />
-                        </button>
-                      )}
                       <button
                         onClick={() => handleDeleteAccount(account.id)}
                         className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"

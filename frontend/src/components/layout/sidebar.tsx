@@ -30,7 +30,7 @@ const navItems = [
 export function Sidebar({ currentPath }: { currentPath: string }) {
   return (
     <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <div className="p-4 border-b border-gray-200">
+      <Link href="/dashboard" className="p-4 border-b border-gray-200 block">
         <div className="flex items-center gap-2">
           <ShieldCheck className="w-8 h-8 text-primary-600" />
           <div>
@@ -38,7 +38,7 @@ export function Sidebar({ currentPath }: { currentPath: string }) {
             <p className="text-xs text-gray-500">Admin Dashboard</p>
           </div>
         </div>
-      </div>
+      </Link>
       <nav className="flex-1 p-3 space-y-1">
         {navItems.map((item) => {
           const Icon = item.icon;

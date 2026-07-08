@@ -18,6 +18,7 @@ import { AIModule } from './ai/ai.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 import { StarlinkAccountsModule } from './modules/starlink-accounts/starlink-accounts.module';
 import { RegionPlanModule } from './modules/region-plan/region-plan.module';
+import { PlaygroundModule } from './modules/playground/playground.module';
 
 @Module({
   imports: [
@@ -45,6 +46,7 @@ import { RegionPlanModule } from './modules/region-plan/region-plan.module';
     KnowledgeBaseModule,
     StarlinkAccountsModule,
     RegionPlanModule,
+    PlaygroundModule,
   ],
   providers: [
     {

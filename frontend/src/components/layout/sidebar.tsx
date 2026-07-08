@@ -14,6 +14,7 @@ import {
   MessageSquare,
   Satellite,
   Globe,
+  Bot,
 } from 'lucide-react';
 
 const navItems = [
@@ -26,6 +27,7 @@ const navItems = [
   { href: '/dashboard/manual-review', label: 'Manual Review', icon: AlertTriangle },
   { href: '/dashboard/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
+  { href: '/dashboard/playground', label: 'Playground', icon: Bot },
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 

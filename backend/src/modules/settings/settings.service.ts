@@ -83,6 +83,9 @@ export class SettingsService {
   async updateBatch(category: string, updates: Record<string, string>, updatedBy?: string) {
     const results = [];
     for (const [key, value] of Object.entries(updates)) {
+      const isMasked = /^[•*\u2022]+$/.test(value);
+      if (isMasked) continue;
+
       const sensitiveKeys = ['api_key', 'token', 'secret', 'password'];
       const isEncrypted = sensitiveKeys.some(s => key.toLowerCase().includes(s));
       const result = await this.set(category, key, value, { isEncrypted, updatedBy });

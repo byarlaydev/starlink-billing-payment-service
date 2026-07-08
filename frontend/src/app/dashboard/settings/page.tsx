@@ -106,7 +106,12 @@ export default function SettingsPage() {
       const updates: Record<string, string> = {};
       group.fields.forEach(f => {
         const val = editValues[`${activeTab}:${f.key}`];
-        if (val !== undefined) updates[f.key] = val;
+        if (val !== undefined) {
+          const isMasked = /^[•*\u2022]+$/.test(val);
+          if (!isMasked) {
+            updates[f.key] = val;
+          }
+        }
       });
       await api.put(`/settings/${activeTab}`, updates);
       toast.success('Settings saved successfully');

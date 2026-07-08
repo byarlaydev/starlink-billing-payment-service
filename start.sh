@@ -1,9 +1,9 @@
 #!/bin/sh
 set -e
 
-echo "Running database migrations..."
+echo "Syncing database schema..."
 cd /app/backend
-npx prisma migrate deploy
+npx prisma db push
 
 echo "Seeding database..."
 npx prisma db seed

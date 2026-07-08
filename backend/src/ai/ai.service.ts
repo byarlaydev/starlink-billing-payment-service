@@ -5,6 +5,7 @@ import { GeminiProvider } from './providers/gemini.provider';
 import { KnowledgeBaseService } from '../modules/knowledge-base/knowledge-base.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { Language } from '@prisma/client';
+import { SYSTEM_PROMPT, FAQ_PROMPT, HUMAN_RESPONSE_GUIDELINES } from './prompts/system-prompts';
 
 @Injectable()
 export class AIService {
@@ -62,6 +63,18 @@ export class AIService {
       temperature: parseFloat(this.configService.get<string>('GEMINI_TEMPERATURE', '0.3')),
       maxOutputTokens: parseInt(this.configService.get<string>('GEMINI_MAX_OUTPUT_TOKENS', '4096'), 10),
     };
+  }
+
+  async getEffectiveSystemPrompt(): Promise<string> {
+    try {
+      const customPrompt = await this.settingsService.get('ai', 'system_prompt');
+      if (customPrompt) {
+        return customPrompt + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
+      }
+    } catch (err) {
+      this.logger.warn('Failed to load system prompt from DB settings', err);
+    }
+    return SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
   }
 
   async buildKnowledgeContext(query: string, language: Language = Language.EN): Promise<string> {

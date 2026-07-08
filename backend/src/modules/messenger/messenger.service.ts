@@ -4,7 +4,6 @@ import { PrismaService } from '../../config/prisma.service';
 import { AIService } from '../../ai/ai.service';
 import { CustomersService } from '../customers/customers.service';
 import { BillingService } from '../billing/billing.service';
-import { SYSTEM_PROMPT, FAQ_PROMPT, HUMAN_RESPONSE_GUIDELINES } from '../../ai/prompts/system-prompts';
 import { ConversationState, Language } from '@prisma/client';
 
 interface MessengerEvent {
@@ -411,7 +410,8 @@ export class MessengerService {
     const customerProfile = this.buildCustomerProfile(context);
     const language = customer.preferredLang === 'MY' ? Language.MY : Language.EN;
 
-    const systemPrompt = SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES + customerProfile;
+    const basePrompt = await this.aiService.getEffectiveSystemPrompt();
+    const systemPrompt = basePrompt + customerProfile;
 
     const response = await this.aiService.chat(
       [
@@ -638,9 +638,10 @@ What can I help you with today?`;
     const customerProfile = context ? this.buildCustomerProfile(context) : '';
     const language = customer.preferredLang === 'MY' ? Language.MY : Language.EN;
 
+    const basePrompt = await this.aiService.getEffectiveSystemPrompt();
     const faqResponse = await this.aiService.chat(
       [
-        { role: 'system', content: SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES + customerProfile },
+        { role: 'system', content: basePrompt + customerProfile },
         { role: 'user', content: 'What are the most common questions people ask? Give me a friendly overview.' },
       ],
       'FAQ questions',

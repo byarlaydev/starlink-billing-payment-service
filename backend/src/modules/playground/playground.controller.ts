@@ -5,7 +5,6 @@ import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
 import { Role, Language } from '@prisma/client';
 import { AIService } from '../../ai/ai.service';
-import { SYSTEM_PROMPT, FAQ_PROMPT, HUMAN_RESPONSE_GUIDELINES } from '../../ai/prompts/system-prompts';
 
 @ApiTags('playground')
 @Controller('playground')
@@ -21,7 +20,7 @@ export class PlaygroundController {
   @ApiOperation({ summary: 'Send a message to the AI bot playground' })
   async chat(@Body() body: { message: string; language?: 'EN' | 'MY' }) {
     const language = body.language === 'MY' ? Language.MY : Language.EN;
-    const systemPrompt = SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
+    const systemPrompt = await this.aiService.getEffectiveSystemPrompt();
 
     try {
       const response = await this.aiService.chat(

@@ -154,22 +154,22 @@ async function main() {
     },
   ];
 
-  for (const entry of knowledgeBaseEntries) {
-    await prisma.knowledgeBase.upsert({
-      where: {
-        id: (await prisma.knowledgeBase.findFirst({
-          where: { title: entry.title, language: entry.language as any },
-        }))?.id || '',
-      },
-      update: {},
-      create: {
-        ...entry,
-        language: entry.language as any,
-        category: entry.category as any,
-        isActive: true,
-        createdBy: 'system',
-      },
-    });
+  const existingCount = await prisma.knowledgeBase.count();
+  if (existingCount > 0) {
+    console.log('Knowledge Base already has entries, skipping seed');
+  } else {
+    for (const entry of knowledgeBaseEntries) {
+      await prisma.knowledgeBase.create({
+        data: {
+          ...entry,
+          language: entry.language as any,
+          category: entry.category as any,
+          isActive: true,
+          createdBy: 'system',
+        },
+      });
+    }
+    console.log(`Seeded ${knowledgeBaseEntries.length} knowledge base entries`);
   }
 
   console.log('Seed data created successfully');

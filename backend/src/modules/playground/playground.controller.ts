@@ -32,10 +32,10 @@ export class PlaygroundController {
         body.message,
         language,
       );
-      return { success: true, data: response };
+      return response;
     } catch (error: any) {
       this.logger.error(`Chat failed: ${error.message}`);
-      return { success: true, data: { text: `⚠️ AI Error: ${error.message}` } };
+      return { text: `⚠️ AI Error: ${error.message}` };
     }
   }
 }

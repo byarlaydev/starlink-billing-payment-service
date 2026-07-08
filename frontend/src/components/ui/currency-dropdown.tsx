@@ -33,6 +33,10 @@ const currencyNames: Record<string, string> = {
 
 const currencies = Object.entries(currencyNames).map(([code, name]) => ({ code, name }));
 
+export function getCurrencyName(code: string): string {
+  return currencyNames[code] || code;
+}
+
 interface CurrencyDropdownProps {
   value: string;
   onChange: (value: string) => void;

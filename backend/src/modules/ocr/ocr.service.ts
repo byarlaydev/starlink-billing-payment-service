@@ -108,7 +108,7 @@ export class OCRService {
       }),
       this.prisma.oCRResult.count({ where: { needsManualReview: true } }),
     ]);
-    return { data, total, page, limit };
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
   }
 
   async getConfidenceDistribution() {

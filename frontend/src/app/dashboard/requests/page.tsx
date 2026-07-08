@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency, formatDate, getStatusColor, getConfidenceColor, cn } from '@/lib/utils';
-import { Search, Filter, Eye, CheckCircle, XCircle, Clock } from 'lucide-react';
+import { Search, Filter, Eye, CheckCircle, XCircle, Clock, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/error-utils';
 
 interface BillingRequest {
   id: string;
@@ -42,7 +44,7 @@ export default function RequestsPage() {
       setRequests(res.data.data.data);
       setTotal(res.data.data.total);
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -53,9 +55,10 @@ export default function RequestsPage() {
   const updateStatus = async (id: string, status: string) => {
     try {
       await api.put(`/billing/${id}/status`, { status });
+      toast.success(`Request ${status.toLowerCase()}`);
       fetchRequests();
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -109,9 +112,19 @@ export default function RequestsPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  <span>Loading requests...</span>
+                </td>
+              </tr>
             ) : requests.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No requests found</td></tr>
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                  <p className="font-medium">No requests found</p>
+                  <p className="text-xs mt-1">Try adjusting your filters</p>
+                </td>
+              </tr>
             ) : (
               requests.map((req) => (
                 <tr key={req.id} className="hover:bg-gray-50">
@@ -186,7 +199,7 @@ function RequestDetailModal({ request, onClose, onUpdate }: { request: BillingRe
       onUpdate();
       onClose();
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -195,7 +208,7 @@ function RequestDetailModal({ request, onClose, onUpdate }: { request: BillingRe
       <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl font-bold">Request {request.requestId}</h2>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">X</button>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg text-lg leading-none">✕</button>
         </div>
 
         <div className="grid grid-cols-2 gap-4 mb-6">

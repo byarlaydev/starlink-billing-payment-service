@@ -3,7 +3,9 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatCurrency } from '@/lib/utils';
-import { BarChart3, TrendingUp, CheckCircle, XCircle, Clock, AlertTriangle } from 'lucide-react';
+import { BarChart3, TrendingUp, CheckCircle, XCircle, Clock, AlertTriangle, Loader2 } from 'lucide-react';
+import { toast } from 'sonner';
+import { getErrorMessage } from '@/lib/error-utils';
 
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<any>(null);
@@ -23,7 +25,7 @@ export default function AnalyticsPage() {
         setAnalytics(analyticsRes.data.data);
         setOcrDistribution(ocrRes.data.data);
       } catch (err) {
-        console.error(err);
+        toast.error(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -31,7 +33,12 @@ export default function AnalyticsPage() {
     fetchData();
   }, []);
 
-  if (loading) return <div className="text-center py-12 text-gray-500">Loading analytics...</div>;
+  if (loading) return (
+    <div className="text-center py-12 text-gray-500">
+      <Loader2 className="w-8 h-8 animate-spin mx-auto mb-3" />
+      <span>Loading analytics...</span>
+    </div>
+  );
 
   const statCards = [
     { label: 'Total Requests', value: stats?.total || 0, icon: BarChart3, color: 'bg-blue-50 text-blue-600' },

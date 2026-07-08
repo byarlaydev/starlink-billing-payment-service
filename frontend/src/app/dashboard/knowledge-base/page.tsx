@@ -3,9 +3,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
-import { Search, Plus, Edit, Trash2, BookOpen } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, BookOpen, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select } from '@/components/ui/select';
+import { getErrorMessage } from '@/lib/error-utils';
 
 interface KnowledgeEntry {
   id: string;
@@ -45,7 +46,7 @@ export default function KnowledgeBasePage() {
       setEntries(res.data.data.data);
       setTotal(res.data.data.total);
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -54,13 +55,13 @@ export default function KnowledgeBasePage() {
   useEffect(() => { fetchEntries(); }, [categoryFilter, languageFilter, page, search]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this entry?')) return;
+    if (!confirm('Delete this entry?')) return;
     try {
       await api.delete(`/knowledge-base/${id}`);
       toast.success('Entry deleted');
       fetchEntries();
     } catch (err) {
-      toast.error('Failed to delete entry');
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -70,7 +71,7 @@ export default function KnowledgeBasePage() {
       toast.success(`Entry ${!isActive ? 'activated' : 'deactivated'}`);
       fetchEntries();
     } catch (err) {
-      toast.error('Failed to update entry');
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -125,9 +126,16 @@ export default function KnowledgeBasePage() {
 
       <div className="grid gap-4">
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
+          <div className="text-center py-12 text-gray-500">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+            <span>Loading entries...</span>
+          </div>
         ) : entries.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">No entries found</div>
+          <div className="text-center py-12 text-gray-500">
+            <BookOpen className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+            <p className="font-medium">No entries found</p>
+            <p className="text-xs mt-1">Click "Add Entry" to create one</p>
+          </div>
         ) : (
           entries.map((entry) => (
             <div key={entry.id} className="bg-white rounded-xl border border-gray-200 p-6">
@@ -258,7 +266,7 @@ function KnowledgeEntryModal({ entry, onClose, onRefresh }: { entry: KnowledgeEn
       onRefresh();
       onClose();
     } catch (err) {
-      toast.error('Failed to save entry');
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

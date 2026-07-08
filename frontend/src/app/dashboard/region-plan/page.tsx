@@ -3,41 +3,10 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
-import { Search, Plus, Edit, Trash2, Globe, DollarSign } from 'lucide-react';
-import { CurrencyDropdown } from '@/components/ui/currency-dropdown';
+import { Search, Plus, Edit, Trash2, Globe, DollarSign, Loader2 } from 'lucide-react';
+import { CurrencyDropdown, getCurrencyName } from '@/components/ui/currency-dropdown';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
-
-const currencyNames: Record<string, string> = {
-  USD: 'US Dollar',
-  EUR: 'Euro',
-  GBP: 'British Pound',
-  MMK: 'Myanmar Kyat',
-  THB: 'Thai Baht',
-  SGD: 'Singapore Dollar',
-  MYR: 'Malaysian Ringgit',
-  IDR: 'Indonesian Rupiah',
-  PHP: 'Philippine Peso',
-  VND: 'Vietnamese Dong',
-  KRW: 'South Korean Won',
-  JPY: 'Japanese Yen',
-  CNY: 'Chinese Yuan',
-  INR: 'Indian Rupee',
-  BDT: 'Bangladeshi Taka',
-  LKR: 'Sri Lankan Rupee',
-  PKR: 'Pakistani Rupee',
-  NPR: 'Nepalese Rupee',
-  AUD: 'Australian Dollar',
-  CAD: 'Canadian Dollar',
-  CHF: 'Swiss Franc',
-  NZD: 'New Zealand Dollar',
-  HKD: 'Hong Kong Dollar',
-  TWD: 'Taiwan Dollar',
-};
-
-function getCurrencyName(code: string): string {
-  return currencyNames[code] || code;
-}
 
 interface RegionPlan {
   id: string;
@@ -68,7 +37,7 @@ export default function RegionPlanPage() {
       setRegionPlans(res.data.data.data);
       setTotal(res.data.data.total);
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -79,7 +48,7 @@ export default function RegionPlanPage() {
   }, [page, search]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this region and plan?')) return;
+    if (!confirm('Delete this region and plan?')) return;
     try {
       await api.delete(`/region-plan/${id}`);
       toast.success('Region and plan has been deleted.');
@@ -133,9 +102,16 @@ export default function RegionPlanPage() {
 
       <div className="grid gap-4">
         {loading ? (
-          <div className="text-center py-12 text-gray-500">Loading...</div>
+          <div className="text-center py-12 text-gray-500">
+            <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+            <span>Loading regions and plans...</span>
+          </div>
         ) : regionPlans.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">No regions and plans found</div>
+          <div className="text-center py-12 text-gray-500">
+            <Globe className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+            <p className="font-medium">No regions and plans found</p>
+            <p className="text-xs mt-1">Click "Add Region & Plan" to create one</p>
+          </div>
         ) : (
           regionPlans.map((rp) => (
             <div key={rp.id} className="bg-white rounded-xl border border-gray-200 p-6">

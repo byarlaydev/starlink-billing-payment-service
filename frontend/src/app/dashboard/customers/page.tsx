@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
-import { Search, CheckCircle, XCircle, MessageSquare, UserPlus, Satellite, ExternalLink } from 'lucide-react';
+import { Search, CheckCircle, XCircle, MessageSquare, UserPlus, Satellite, ExternalLink, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Select } from '@/components/ui/select';
+import { getErrorMessage } from '@/lib/error-utils';
+import { useAuthStore } from '@/lib/store';
 
 interface RegionPlan {
   id: string;
@@ -70,7 +72,7 @@ export default function CustomersPage() {
       setCustomers(res.data.data.data);
       setTotal(res.data.data.total);
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -82,7 +84,7 @@ export default function CustomersPage() {
     try {
       await api.put(`/customers/${id}/review`, {
         reviewStatus: status,
-        adminId: 'current-admin',
+        adminId: useAuthStore.getState().user?.id || 'current-admin',
       });
       toast.success(`Customer ${status === 'APPROVED' ? 'approved' : 'rejected'}`);
       fetchCustomers();
@@ -93,7 +95,7 @@ export default function CustomersPage() {
 
   const handleTakeover = async (id: string) => {
     try {
-      await api.put(`/customers/${id}/takeover`, { adminId: 'current-admin' });
+      await api.put(`/customers/${id}/takeover`, { adminId: useAuthStore.getState().user?.id || 'current-admin' });
       toast.success('Conversation taken over');
       fetchCustomers();
     } catch (err) {
@@ -167,9 +169,19 @@ export default function CustomersPage() {
           </thead>
           <tbody className="divide-y divide-gray-100">
             {loading ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading...</td></tr>
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  <span>Loading customers...</span>
+                </td>
+              </tr>
             ) : customers.length === 0 ? (
-              <tr><td colSpan={7} className="px-4 py-8 text-center text-gray-500">No customers found</td></tr>
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center text-gray-500">
+                  <p className="font-medium">No customers found</p>
+                  <p className="text-xs mt-1">Try adjusting your search or filters</p>
+                </td>
+              </tr>
             ) : (
               customers.map((customer) => (
                 <tr key={customer.id} className="hover:bg-gray-50">
@@ -342,7 +354,7 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
           const res = await api.get(`/starlink-accounts/customer/${customer.id}`);
           setAccounts(res.data.data);
         } catch (err) {
-          console.error(err);
+          toast.error(getErrorMessage(err));
         } finally {
           setLoadingAccounts(false);
         }
@@ -354,7 +366,7 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
         const res = await api.get('/region-plan', { params: { isActive: 'true', limit: 100 } });
         setRegionPlans(res.data.data.data);
       } catch (err) {
-        console.error(err);
+        toast.error(getErrorMessage(err));
       }
     };
     fetchRegionPlans();
@@ -652,7 +664,7 @@ function ConversationModal({ customer, onClose, onRefresh }: { customer: Custome
         const res = await api.get(`/customers/${customer.id}/conversations`);
         setConversations(res.data.data.reverse());
       } catch (err) {
-        console.error(err);
+        toast.error(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -666,7 +678,7 @@ function ConversationModal({ customer, onClose, onRefresh }: { customer: Custome
     try {
       await api.post(`/customers/${customer.id}/message`, {
         content: message,
-        adminId: 'current-admin',
+        adminId: useAuthStore.getState().user?.id || 'current-admin',
       });
       setMessage('');
       const res = await api.get(`/customers/${customer.id}/conversations`);
@@ -762,12 +774,12 @@ function AddCustomerModal({ onClose, onRefresh }: { onClose: () => void; onRefre
     e.preventDefault();
     setSubmitting(true);
     try {
-      await api.post('/customers', { ...formData, adminId: 'current-admin' });
+      await api.post('/customers', { ...formData, adminId: useAuthStore.getState().user?.id || 'current-admin' });
       toast.success('Customer created');
       onRefresh();
       onClose();
     } catch (err) {
-      toast.error('Failed to create customer');
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

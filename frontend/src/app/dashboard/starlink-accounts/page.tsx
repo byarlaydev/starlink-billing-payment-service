@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
-import { Search, Plus, Edit, Trash2, Satellite } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Satellite, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
 import { Select } from '@/components/ui/select';
@@ -56,7 +56,7 @@ export default function StarlinkAccountsPage() {
       setAccounts(res.data.data.data);
       setTotal(res.data.data.total);
     } catch (err) {
-      console.error(err);
+      toast.error(getErrorMessage(err));
     } finally {
       setLoading(false);
     }
@@ -67,7 +67,7 @@ export default function StarlinkAccountsPage() {
   }, [page, search]);
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this Starlink account?')) return;
+    if (!confirm('Delete this Starlink account?')) return;
     try {
       await api.delete(`/starlink-accounts/${id}`);
       toast.success('Starlink account has been deleted.');
@@ -123,14 +123,17 @@ export default function StarlinkAccountsPage() {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                  Loading...
+                <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                  <Loader2 className="w-6 h-6 animate-spin mx-auto mb-2" />
+                  <span>Loading accounts...</span>
                 </td>
               </tr>
             ) : accounts.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
-                  No Starlink accounts found
+                <td colSpan={5} className="px-4 py-12 text-center text-gray-500">
+                  <Satellite className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                  <p className="font-medium">No Starlink accounts found</p>
+                  <p className="text-xs mt-1">Click "Add Account" to register one</p>
                 </td>
               </tr>
             ) : (
@@ -265,7 +268,7 @@ function AccountModal({
         setCustomers(customersRes.data.data.data);
         setRegionPlans(regionPlansRes.data.data.data);
       } catch (err) {
-        console.error(err);
+        toast.error(getErrorMessage(err));
       }
     };
     fetchData();
@@ -363,7 +366,7 @@ function AccountModal({
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Account Password</label>
               <input
-                type="text"
+                type="password"
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"

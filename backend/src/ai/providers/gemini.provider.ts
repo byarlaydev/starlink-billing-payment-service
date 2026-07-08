@@ -55,17 +55,16 @@ export class GeminiProvider implements AIProvider {
     const systemInstruction = messages.find(m => m.role === 'system')?.content;
     const chatMessages = messages.filter(m => m.role !== 'system');
 
-    const chat = model.startChat({
-      history: systemInstruction
-        ? [{ role: 'user', parts: [{ text: systemInstruction }] }, { role: 'model', parts: [{ text: 'Understood. I will follow these instructions.' }] }]
-        : [],
-    });
+    const contents = chatMessages.map(m => ({
+      role: m.role === 'assistant' ? 'model' : 'user',
+      parts: [{ text: m.content }],
+    }));
 
-    let lastResponse = '';
-    for (const msg of chatMessages) {
-      const result = await chat.sendMessage(msg.content);
-      lastResponse = result.response.text();
-    }
+    const result = await model.generateContent({
+      systemInstruction,
+      contents,
+    });
+    const lastResponse = result.response.text();
 
     const latencyMs = Date.now() - startTime;
 

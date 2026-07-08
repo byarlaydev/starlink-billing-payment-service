@@ -1,6 +1,7 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, ConflictException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
 import { StarlinkRegionAndPlan } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class RegionPlanService {
@@ -15,18 +16,25 @@ export class RegionPlanService {
     price?: number;
     currency?: string;
   }): Promise<StarlinkRegionAndPlan> {
-    const regionPlan = await this.prisma.starlinkRegionAndPlan.create({
-      data: {
-        region: data.region,
-        plan: data.plan,
-        description: data.description,
-        price: data.price,
-        currency: data.currency || 'USD',
-      },
-    });
+    try {
+      const regionPlan = await this.prisma.starlinkRegionAndPlan.create({
+        data: {
+          region: data.region,
+          plan: data.plan,
+          description: data.description,
+          price: data.price,
+          currency: data.currency || 'USD',
+        },
+      });
 
-    this.logger.log(`Created Starlink region and plan: ${data.region} - ${data.plan}`);
-    return regionPlan;
+      this.logger.log(`Created Starlink region and plan: ${data.region} - ${data.plan}`);
+      return regionPlan;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`Region "${data.region}" with plan "${data.plan}" already exists`);
+      }
+      throw error;
+    }
   }
 
   async findAll(filter?: {
@@ -76,13 +84,20 @@ export class RegionPlanService {
   ): Promise<StarlinkRegionAndPlan> {
     await this.findById(id);
 
-    const updated = await this.prisma.starlinkRegionAndPlan.update({
-      where: { id },
-      data,
-    });
+    try {
+      const updated = await this.prisma.starlinkRegionAndPlan.update({
+        where: { id },
+        data,
+      });
 
-    this.logger.log(`Updated Starlink region and plan ${id}`);
-    return updated;
+      this.logger.log(`Updated Starlink region and plan ${id}`);
+      return updated;
+    } catch (error) {
+      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+        throw new ConflictException(`Region "${data.region}" with plan "${data.plan}" already exists`);
+      }
+      throw error;
+    }
   }
 
   async delete(id: string): Promise<void> {

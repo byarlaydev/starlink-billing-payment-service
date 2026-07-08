@@ -66,10 +66,22 @@ export class AIService {
   }
 
   private sanitizeForGemini(text: string): string {
-    return text.replace(/[\u2022\u2023\u25E6]/g, '-')
-               .replace(/[\u2018\u2019]/g, "'")
-               .replace(/[\u201C\u201D]/g, '"')
-               .replace(/[\u2013\u2014]/g, '-');
+    const chars: string[] = [];
+    for (let i = 0; i < text.length; i++) {
+      const code = text.charCodeAt(i);
+      if (code > 255) {
+        switch (code) {
+          case 8226: case 8227: case 9702: chars.push('-'); break;
+          case 8216: case 8217: chars.push("'"); break;
+          case 8220: case 8221: chars.push('"'); break;
+          case 8211: case 8212: chars.push('-'); break;
+          default: chars.push(text[i]); break;
+        }
+      } else {
+        chars.push(text[i]);
+      }
+    }
+    return chars.join('');
   }
 
   async getEffectiveSystemPrompt(): Promise<string> {

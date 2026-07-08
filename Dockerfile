@@ -38,7 +38,8 @@ RUN cd backend && npm ci --omit=dev
 COPY --from=backend-builder /app/dist ./backend/dist
 COPY --from=backend-builder /app/node_modules/.prisma ./backend/node_modules/.prisma
 COPY --from=backend-builder /app/node_modules/@prisma ./backend/node_modules/@prisma
-COPY backend/prisma ./backend/prisma
+COPY --from=backend-builder /app/prisma/seed.js ./backend/prisma/seed.js
+COPY backend/prisma/schema.prisma ./backend/prisma/schema.prisma
 
 # Copy frontend build
 COPY --from=frontend-builder /app/.next/standalone ./frontend

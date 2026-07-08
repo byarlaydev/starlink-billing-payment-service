@@ -4,6 +4,9 @@ set -e
 echo "Running database migrations..."
 cd /app/backend
 npx prisma migrate deploy
+
+echo "Seeding database..."
+npx prisma db seed
 cd /app
 
 echo "Starting backend and frontend with PM2..."

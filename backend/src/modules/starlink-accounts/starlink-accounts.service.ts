@@ -10,9 +10,12 @@ export class StarlinkAccountsService {
 
   async create(data: {
     customerId: string;
-    email: string;
-    accountNumber?: string;
-    nickname?: string;
+    accountName: string;
+    accountNumber: string;
+    email?: string;
+    password?: string;
+    regionPlanId?: string;
+    serviceAddress?: string;
     isPrimary?: boolean;
     notes?: string;
   }): Promise<StarlinkAccount> {
@@ -32,24 +35,19 @@ export class StarlinkAccountsService {
     const account = await this.prisma.starlinkAccount.create({
       data: {
         customerId: data.customerId,
-        email: data.email,
+        accountName: data.accountName,
         accountNumber: data.accountNumber,
-        nickname: data.nickname,
+        email: data.email,
+        password: data.password,
+        regionPlanId: data.regionPlanId,
+        serviceAddress: data.serviceAddress,
         isPrimary: data.isPrimary ?? existingCount === 0,
         notes: data.notes,
       },
+      include: {
+        regionPlan: true,
+      },
     });
-
-    // Update customer's primary starlink email/account fields
-    if (account.isPrimary) {
-      await this.prisma.customer.update({
-        where: { id: data.customerId },
-        data: {
-          starlinkEmail: account.email,
-          starlinkAccount: account.accountNumber,
-        },
-      });
-    }
 
     this.logger.log(`Created Starlink account ${account.id} for customer ${data.customerId}`);
     return account;
@@ -83,6 +81,7 @@ export class StarlinkAccountsService {
               messengerPsid: true,
             },
           },
+          regionPlan: true,
         },
       }),
       this.prisma.starlinkAccount.count({ where }),
@@ -94,7 +93,10 @@ export class StarlinkAccountsService {
   async findById(id: string): Promise<StarlinkAccount> {
     const account = await this.prisma.starlinkAccount.findUnique({
       where: { id },
-      include: { customer: true },
+      include: { 
+        customer: true,
+        regionPlan: true,
+      },
     });
     if (!account) {
       throw new NotFoundException(`Starlink account ${id} not found`);
@@ -106,15 +108,21 @@ export class StarlinkAccountsService {
     return this.prisma.starlinkAccount.findMany({
       where: { customerId },
       orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+      include: {
+        regionPlan: true,
+      },
     });
   }
 
   async update(
     id: string,
     data: {
-      email?: string;
+      accountName?: string;
       accountNumber?: string;
-      nickname?: string;
+      email?: string;
+      password?: string;
+      regionPlanId?: string;
+      serviceAddress?: string;
       isPrimary?: boolean;
       isActive?: boolean;
       notes?: string;
@@ -128,20 +136,14 @@ export class StarlinkAccountsService {
         where: { customerId: account.customerId, id: { not: id } },
         data: { isPrimary: false },
       });
-
-      // Update customer's primary fields
-      await this.prisma.customer.update({
-        where: { id: account.customerId },
-        data: {
-          starlinkEmail: data.email || account.email,
-          starlinkAccount: data.accountNumber || account.accountNumber,
-        },
-      });
     }
 
     const updated = await this.prisma.starlinkAccount.update({
       where: { id },
       data,
+      include: {
+        regionPlan: true,
+      },
     });
 
     this.logger.log(`Updated Starlink account ${id}`);
@@ -165,23 +167,6 @@ export class StarlinkAccountsService {
           where: { id: nextPrimary.id },
           data: { isPrimary: true },
         });
-
-        await this.prisma.customer.update({
-          where: { id: account.customerId },
-          data: {
-            starlinkEmail: nextPrimary.email,
-            starlinkAccount: nextPrimary.accountNumber,
-          },
-        });
-      } else {
-        // No more accounts, clear customer fields
-        await this.prisma.customer.update({
-          where: { id: account.customerId },
-          data: {
-            starlinkEmail: null,
-            starlinkAccount: null,
-          },
-        });
       }
     }
 
@@ -199,13 +184,8 @@ export class StarlinkAccountsService {
     const updated = await this.prisma.starlinkAccount.update({
       where: { id },
       data: { isPrimary: true },
-    });
-
-    await this.prisma.customer.update({
-      where: { id: account.customerId },
-      data: {
-        starlinkEmail: account.email,
-        starlinkAccount: account.accountNumber,
+      include: {
+        regionPlan: true,
       },
     });
 

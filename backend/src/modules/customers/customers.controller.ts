@@ -41,8 +41,6 @@ export class CustomersController {
     facebookName?: string;
     contactNumber?: string;
     emailAddress?: string;
-    starlinkEmail?: string;
-    starlinkAccount?: string;
     preferredLang?: 'EN' | 'MY';
   }, @Query('adminId') adminId: string) {
     return this.customersService.adminCreate({ ...body, adminId });

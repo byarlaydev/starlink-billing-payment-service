@@ -17,6 +17,7 @@ import { AdminModule } from './modules/admin/admin.module';
 import { AIModule } from './ai/ai.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 import { StarlinkAccountsModule } from './modules/starlink-accounts/starlink-accounts.module';
+import { RegionPlanModule } from './modules/region-plan/region-plan.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { StarlinkAccountsModule } from './modules/starlink-accounts/starlink-acc
     AdminModule,
     KnowledgeBaseModule,
     StarlinkAccountsModule,
+    RegionPlanModule,
   ],
   providers: [
     {

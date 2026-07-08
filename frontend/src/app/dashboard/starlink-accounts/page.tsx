@@ -6,12 +6,25 @@ import { formatDate, cn } from '@/lib/utils';
 import { Search, Plus, Edit, Trash2, Star, Satellite } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface RegionPlan {
+  id: string;
+  region: string;
+  plan: string;
+  description: string | null;
+  price: number | null;
+  currency: string;
+  isActive: boolean;
+}
+
 interface StarlinkAccount {
   id: string;
   customerId: string;
-  email: string;
-  accountNumber: string | null;
-  nickname: string | null;
+  accountName: string;
+  accountNumber: string;
+  email: string | null;
+  password: string | null;
+  regionPlanId: string | null;
+  serviceAddress: string | null;
   isPrimary: boolean;
   isActive: boolean;
   notes: string | null;
@@ -23,6 +36,7 @@ interface StarlinkAccount {
     facebookName: string | null;
     messengerPsid: string;
   };
+  regionPlan: RegionPlan | null;
 }
 
 export default function StarlinkAccountsPage() {
@@ -112,6 +126,7 @@ export default function StarlinkAccountsPage() {
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Account</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Customer</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Region & Plan</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Created</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
@@ -120,13 +135,13 @@ export default function StarlinkAccountsPage() {
           <tbody className="divide-y divide-gray-100">
             {loading ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                   Loading...
                 </td>
               </tr>
             ) : accounts.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-gray-500">
+                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">
                   No Starlink accounts found
                 </td>
               </tr>
@@ -138,16 +153,14 @@ export default function StarlinkAccountsPage() {
                       <Satellite className="w-4 h-4 text-primary-600" />
                       <div>
                         <div className="text-sm font-medium text-gray-900">
-                          {account.email}
+                          {account.accountName}
                           {account.isPrimary && (
                             <Star className="inline w-3 h-3 ml-1 text-yellow-500 fill-yellow-500" />
                           )}
                         </div>
-                        {account.accountNumber && (
-                          <div className="text-xs text-gray-500">#{account.accountNumber}</div>
-                        )}
-                        {account.nickname && (
-                          <div className="text-xs text-gray-500">{account.nickname}</div>
+                        <div className="text-xs text-gray-500">#{account.accountNumber}</div>
+                        {account.email && (
+                          <div className="text-xs text-gray-500">{account.email}</div>
                         )}
                       </div>
                     </div>
@@ -157,6 +170,16 @@ export default function StarlinkAccountsPage() {
                       {account.customer.fullName || account.customer.facebookName || 'N/A'}
                     </div>
                     <div className="text-xs text-gray-500">{account.customer.messengerPsid}</div>
+                  </td>
+                  <td className="px-4 py-3">
+                    {account.regionPlan ? (
+                      <div>
+                        <div className="text-sm text-gray-900">{account.regionPlan.region}</div>
+                        <div className="text-xs text-gray-500">{account.regionPlan.plan}</div>
+                      </div>
+                    ) : (
+                      <span className="text-xs text-gray-400">Not set</span>
+                    )}
                   </td>
                   <td className="px-4 py-3">
                     <span
@@ -253,37 +276,49 @@ function AccountModal({
 }) {
   const [formData, setFormData] = useState({
     customerId: account?.customerId || '',
-    email: account?.email || '',
+    accountName: account?.accountName || '',
     accountNumber: account?.accountNumber || '',
-    nickname: account?.nickname || '',
+    email: account?.email || '',
+    password: account?.password || '',
+    regionPlanId: account?.regionPlanId || '',
+    serviceAddress: account?.serviceAddress || '',
     isPrimary: account?.isPrimary || false,
     isActive: account?.isActive ?? true,
     notes: account?.notes || '',
   });
   const [customers, setCustomers] = useState<any[]>([]);
+  const [regionPlans, setRegionPlans] = useState<RegionPlan[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const fetchCustomers = async () => {
+    const fetchData = async () => {
       try {
-        const res = await api.get('/customers', { params: { limit: 100 } });
-        setCustomers(res.data.data.data);
+        const [customersRes, regionPlansRes] = await Promise.all([
+          api.get('/customers', { params: { limit: 100 } }),
+          api.get('/region-plan', { params: { isActive: 'true', limit: 100 } }),
+        ]);
+        setCustomers(customersRes.data.data.data);
+        setRegionPlans(regionPlansRes.data.data.data);
       } catch (err) {
         console.error(err);
       }
     };
-    fetchCustomers();
+    fetchData();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSubmitting(true);
     try {
+      const submitData = {
+        ...formData,
+        regionPlanId: formData.regionPlanId || undefined,
+      };
       if (account) {
-        await api.put(`/starlink-accounts/${account.id}`, formData);
+        await api.put(`/starlink-accounts/${account.id}`, submitData);
         toast.success('Account updated');
       } else {
-        await api.post('/starlink-accounts', formData);
+        await api.post('/starlink-accounts', submitData);
         toast.success('Account created');
       }
       onRefresh();
@@ -324,32 +359,70 @@ function AccountModal({
             </select>
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Starlink Email *</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Account Name *</label>
             <input
-              type="email"
-              value={formData.email}
-              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              type="text"
+              value={formData.accountName}
+              onChange={(e) => setFormData({ ...formData, accountName: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               required
+              placeholder="e.g., Home Internet, Office Satellite"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Account Number *</label>
             <input
               type="text"
               value={formData.accountNumber}
               onChange={(e) => setFormData({ ...formData, accountNumber: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              required
+              placeholder="e.g., SL-123456"
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Nickname</label>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Account Email</label>
+            <input
+              type="email"
+              value={formData.email}
+              onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="user@example.com"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Account Password</label>
             <input
               type="text"
-              value={formData.nickname}
-              onChange={(e) => setFormData({ ...formData, nickname: e.target.value })}
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              placeholder="e.g., Home, Office"
+              placeholder="Enter password"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Region & Plan</label>
+            <select
+              value={formData.regionPlanId}
+              onChange={(e) => setFormData({ ...formData, regionPlanId: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">Select region and plan</option>
+              {regionPlans.map((rp) => (
+                <option key={rp.id} value={rp.id}>
+                  {rp.region} - {rp.plan} {rp.price ? `($${rp.price})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Service Address</label>
+            <textarea
+              value={formData.serviceAddress}
+              onChange={(e) => setFormData({ ...formData, serviceAddress: e.target.value })}
+              rows={2}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              placeholder="Enter service address"
             />
           </div>
           <div>
@@ -357,7 +430,7 @@ function AccountModal({
             <textarea
               value={formData.notes}
               onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              rows={3}
+              rows={2}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>

@@ -140,9 +140,13 @@ model StarlinkAccount {
   id              String   @id @default(uuid())
   customerId      String
   customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  email           String
-  accountNumber   String?
-  nickname        String?
+  accountName     String
+  accountNumber   String
+  email           String?
+  password        String?
+  regionPlanId    String?
+  regionPlan      StarlinkRegionAndPlan? @relation(fields: [regionPlanId], references: [id])
+  serviceAddress  String?  @db.Text
   isPrimary       Boolean  @default(false)
   isActive        Boolean  @default(true)
   notes           String?  @db.Text
@@ -150,8 +154,30 @@ model StarlinkAccount {
   updatedAt       DateTime @updatedAt
 
   @@index([customerId])
-  @@index([email])
+  @@index([accountNumber])
   @@map("starlink_accounts")
+}
+
+// ============================================
+// STARLINK REGION AND PLAN
+// ============================================
+
+model StarlinkRegionAndPlan {
+  id          String   @id @default(uuid())
+  region      String
+  plan        String
+  description String?  @db.Text
+  price       Decimal? @db.Decimal(10, 2)
+  currency    String   @default("USD")
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  accounts    StarlinkAccount[]
+
+  @@unique([region, plan])
+  @@index([isActive])
+  @@map("starlink_region_and_plans")
 }
 
 // ============================================

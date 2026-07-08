@@ -111,8 +111,6 @@ export class CustomersService {
     facebookName?: string;
     contactNumber?: string;
     emailAddress?: string;
-    starlinkEmail?: string;
-    starlinkAccount?: string;
     preferredLang?: Language;
     adminId: string;
   }) {
@@ -123,8 +121,6 @@ export class CustomersService {
         facebookName: data.facebookName,
         contactNumber: data.contactNumber,
         emailAddress: data.emailAddress,
-        starlinkEmail: data.starlinkEmail,
-        starlinkAccount: data.starlinkAccount,
         preferredLang: data.preferredLang || Language.EN,
         dataCollectedBy: 'admin',
         reviewStatus: 'APPROVED',
@@ -136,18 +132,6 @@ export class CustomersService {
     await this.prisma.conversationContext.create({
       data: { customerId: customer.id },
     });
-
-    // Create Starlink account if email provided
-    if (data.starlinkEmail) {
-      await this.prisma.starlinkAccount.create({
-        data: {
-          customerId: customer.id,
-          email: data.starlinkEmail,
-          accountNumber: data.starlinkAccount,
-          isPrimary: true,
-        },
-      });
-    }
 
     await this.prisma.activityLog.create({
       data: {

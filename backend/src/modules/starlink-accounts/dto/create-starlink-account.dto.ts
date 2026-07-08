@@ -6,19 +6,33 @@ export class CreateStarlinkAccountDto {
   @IsUUID()
   customerId: string;
 
-  @ApiProperty({ description: 'Starlink account email', example: 'user@example.com' })
+  @ApiProperty({ description: 'Starlink account name', example: 'Home Account' })
+  @IsString()
+  accountName: string;
+
+  @ApiProperty({ description: 'Starlink account number', example: 'SL-123456' })
+  @IsString()
+  accountNumber: string;
+
+  @ApiPropertyOptional({ description: 'Starlink account email', example: 'user@example.com' })
   @IsEmail()
-  email: string;
+  @IsOptional()
+  email?: string;
 
-  @ApiPropertyOptional({ description: 'Starlink account number', example: 'SL-123456' })
+  @ApiPropertyOptional({ description: 'Starlink account password' })
   @IsString()
   @IsOptional()
-  accountNumber?: string;
+  password?: string;
 
-  @ApiPropertyOptional({ description: 'Account nickname', example: 'Home Account' })
+  @ApiPropertyOptional({ description: 'Region and Plan ID', example: 'uuid-here' })
+  @IsUUID()
+  @IsOptional()
+  regionPlanId?: string;
+
+  @ApiPropertyOptional({ description: 'Service address' })
   @IsString()
   @IsOptional()
-  nickname?: string;
+  serviceAddress?: string;
 
   @ApiPropertyOptional({ description: 'Is this the primary account', default: false })
   @IsBoolean()

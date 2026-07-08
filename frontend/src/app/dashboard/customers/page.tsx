@@ -6,15 +6,29 @@ import { formatDate, cn } from '@/lib/utils';
 import { Search, CheckCircle, XCircle, MessageSquare, UserPlus, Satellite, Star, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
 
+interface RegionPlan {
+  id: string;
+  region: string;
+  plan: string;
+  description: string | null;
+  price: number | null;
+  currency: string;
+  isActive: boolean;
+}
+
 interface StarlinkAccount {
   id: string;
-  email: string;
-  accountNumber: string | null;
-  nickname: string | null;
+  accountName: string;
+  accountNumber: string;
+  email: string | null;
+  password: string | null;
+  regionPlanId: string | null;
+  serviceAddress: string | null;
   isPrimary: boolean;
   isActive: boolean;
   notes: string | null;
   createdAt: string;
+  regionPlan: RegionPlan | null;
 }
 
 interface Customer {
@@ -319,7 +333,8 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
   const [accounts, setAccounts] = useState<StarlinkAccount[]>(customer.starlinkAccounts || []);
   const [loadingAccounts, setLoadingAccounts] = useState(!customer.starlinkAccounts);
   const [showAddAccount, setShowAddAccount] = useState(false);
-  const [newAccount, setNewAccount] = useState({ email: '', accountNumber: '', nickname: '', notes: '' });
+  const [newAccount, setNewAccount] = useState({ accountName: '', accountNumber: '', email: '', password: '', regionPlanId: '', serviceAddress: '', notes: '' });
+  const [regionPlans, setRegionPlans] = useState<any[]>([]);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -336,6 +351,15 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
       };
       fetchAccounts();
     }
+    const fetchRegionPlans = async () => {
+      try {
+        const res = await api.get('/region-plan', { params: { isActive: 'true', limit: 100 } });
+        setRegionPlans(res.data.data.data);
+      } catch (err) {
+        console.error(err);
+      }
+    };
+    fetchRegionPlans();
   }, [customer.id, customer.starlinkAccounts]);
 
   const handleAddAccount = async (e: React.FormEvent) => {
@@ -344,14 +368,17 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
     try {
       await api.post('/starlink-accounts', {
         customerId: customer.id,
-        email: newAccount.email,
-        accountNumber: newAccount.accountNumber || undefined,
-        nickname: newAccount.nickname || undefined,
+        accountName: newAccount.accountName,
+        accountNumber: newAccount.accountNumber,
+        email: newAccount.email || undefined,
+        password: newAccount.password || undefined,
+        regionPlanId: newAccount.regionPlanId || undefined,
+        serviceAddress: newAccount.serviceAddress || undefined,
         notes: newAccount.notes || undefined,
         isPrimary: accounts.length === 0,
       });
       toast.success('Starlink account added');
-      setNewAccount({ email: '', accountNumber: '', nickname: '', notes: '' });
+      setNewAccount({ accountName: '', accountNumber: '', email: '', password: '', regionPlanId: '', serviceAddress: '', notes: '' });
       setShowAddAccount(false);
       const res = await api.get(`/starlink-accounts/customer/${customer.id}`);
       setAccounts(res.data.data);
@@ -466,33 +493,83 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
               <form onSubmit={handleAddAccount} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Starlink Email *</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Account Name *</label>
                     <input
-                      type="email"
-                      value={newAccount.email}
-                      onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                      type="text"
+                      value={newAccount.accountName}
+                      onChange={(e) => setNewAccount({ ...newAccount, accountName: e.target.value })}
                       className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
                       required
+                      placeholder="e.g., Home Internet"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-medium text-gray-700 mb-1">Account Number</label>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Account Number *</label>
                     <input
                       type="text"
                       value={newAccount.accountNumber}
                       onChange={(e) => setNewAccount({ ...newAccount, accountNumber: e.target.value })}
                       className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      required
+                      placeholder="e.g., SL-123456"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Account Email</label>
+                    <input
+                      type="email"
+                      value={newAccount.email}
+                      onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="user@example.com"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Account Password</label>
+                    <input
+                      type="text"
+                      value={newAccount.password}
+                      onChange={(e) => setNewAccount({ ...newAccount, password: e.target.value })}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      placeholder="Enter password"
                     />
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-700 mb-1">Nickname</label>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Region & Plan</label>
+                  <select
+                    value={newAccount.regionPlanId}
+                    onChange={(e) => setNewAccount({ ...newAccount, regionPlanId: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                  >
+                    <option value="">Select region and plan</option>
+                    {regionPlans.map((rp) => (
+                      <option key={rp.id} value={rp.id}>
+                        {rp.region} - {rp.plan} {rp.price ? `($${rp.price})` : ''}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Service Address</label>
                   <input
                     type="text"
-                    value={newAccount.nickname}
-                    onChange={(e) => setNewAccount({ ...newAccount, nickname: e.target.value })}
+                    value={newAccount.serviceAddress}
+                    onChange={(e) => setNewAccount({ ...newAccount, serviceAddress: e.target.value })}
                     className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                    placeholder="e.g., Home, Office"
+                    placeholder="Enter service address"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Notes</label>
+                  <input
+                    type="text"
+                    value={newAccount.notes}
+                    onChange={(e) => setNewAccount({ ...newAccount, notes: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="Additional notes"
                   />
                 </div>
                 <div className="flex gap-2">
@@ -536,7 +613,7 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
                       <Satellite className={cn('w-4 h-4', account.isPrimary ? 'text-primary-600' : 'text-gray-400')} />
                       <div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{account.email}</span>
+                          <span className="text-sm font-medium">{account.accountName}</span>
                           {account.isPrimary && (
                             <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
                           )}
@@ -545,8 +622,13 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
                           )}
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-500">
-                          {account.accountNumber && <span>#{account.accountNumber}</span>}
-                          {account.nickname && <span>({account.nickname})</span>}
+                          <span>#{account.accountNumber}</span>
+                          {account.email && <span>{account.email}</span>}
+                          {account.regionPlan && (
+                            <span className="px-1.5 py-0.5 bg-blue-100 text-blue-700 rounded">
+                              {account.regionPlan.region} - {account.regionPlan.plan}
+                            </span>
+                          )}
                           <span>Created {formatDate(account.createdAt)}</span>
                         </div>
                       </div>
@@ -705,8 +787,6 @@ function AddCustomerModal({ onClose, onRefresh }: { onClose: () => void; onRefre
     facebookName: '',
     contactNumber: '',
     emailAddress: '',
-    starlinkEmail: '',
-    starlinkAccount: '',
   });
   const [submitting, setSubmitting] = useState(false);
 
@@ -770,27 +850,6 @@ function AddCustomerModal({ onClose, onRefresh }: { onClose: () => void; onRefre
               onChange={(e) => setFormData({ ...formData, emailAddress: e.target.value })}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
-          </div>
-          <div className="border-t pt-4">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">Primary Starlink Account</h3>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Starlink Email</label>
-              <input
-                type="email"
-                value={formData.starlinkEmail}
-                onChange={(e) => setFormData({ ...formData, starlinkEmail: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-            </div>
-            <div className="mt-3">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Starlink Account Number</label>
-              <input
-                type="text"
-                value={formData.starlinkAccount}
-                onChange={(e) => setFormData({ ...formData, starlinkAccount: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              />
-            </div>
           </div>
 
           <div className="flex gap-2 pt-4">

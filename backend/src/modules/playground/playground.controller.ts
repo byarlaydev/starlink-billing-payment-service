@@ -23,15 +23,19 @@ export class PlaygroundController {
     const language = body.language === 'MY' ? Language.MY : Language.EN;
     const systemPrompt = SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
 
-    const response = await this.aiService.chat(
-      [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: body.message },
-      ],
-      body.message,
-      language,
-    );
-
-    return { success: true, data: response };
+    try {
+      const response = await this.aiService.chat(
+        [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: body.message },
+        ],
+        body.message,
+        language,
+      );
+      return { success: true, data: response };
+    } catch (error: any) {
+      this.logger.error(`Chat failed: ${error.message}`);
+      return { success: true, data: { text: `⚠️ AI Error: ${error.message}` } };
+    }
   }
 }

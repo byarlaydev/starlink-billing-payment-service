@@ -4,7 +4,7 @@ import { PrismaService } from '../../config/prisma.service';
 import { AIService } from '../../ai/ai.service';
 import { CustomersService } from '../customers/customers.service';
 import { BillingService } from '../billing/billing.service';
-import { SYSTEM_PROMPT, FAQ_PROMPT } from '../../ai/prompts/system-prompts';
+import { SYSTEM_PROMPT, FAQ_PROMPT, HUMAN_RESPONSE_GUIDELINES } from '../../ai/prompts/system-prompts';
 import { ConversationState, Language } from '@prisma/client';
 
 interface MessengerEvent {
@@ -32,6 +32,15 @@ interface CollectedData {
   additionalNotes?: string;
 }
 
+interface CustomerContext {
+  customer: any;
+  conversationHistory: any[];
+  billingHistory: any[];
+  conversationContext: any;
+  lastInteraction: string;
+  totalInteractions: number;
+}
+
 @Injectable()
 export class MessengerService {
   private readonly logger = new Logger(MessengerService.name);
@@ -47,6 +56,63 @@ export class MessengerService {
     this.pageAccessToken = this.configService.get<string>('FB_PAGE_ACCESS_TOKEN', '');
   }
 
+  private async loadFullCustomerContext(customerId: string, psid: string): Promise<CustomerContext> {
+    const customer = await this.customersService.findOrCreate(psid);
+    
+    const [conversationHistory, billingHistory, conversationContext] = await Promise.all([
+      this.customersService.getConversations(customer.id, 20),
+      this.billingService.findByCustomer(customer.id, 1, 10),
+      this.customersService.getConversationContext(customer.id),
+    ]);
+
+    const sortedHistory = conversationHistory.reverse();
+    const lastInteraction = sortedHistory.length > 0 
+      ? sortedHistory[sortedHistory.length - 1].createdAt.toISOString()
+      : customer.createdAt.toISOString();
+
+    return {
+      customer,
+      conversationHistory: sortedHistory,
+      billingHistory: billingHistory.data,
+      conversationContext,
+      lastInteraction,
+      totalInteractions: sortedHistory.length,
+    };
+  }
+
+  private buildCustomerProfile(context: CustomerContext): string {
+    const { customer, billingHistory, conversationHistory, totalInteractions } = context;
+    
+    let profile = `\n\n=== CUSTOMER PROFILE ===\n`;
+    profile += `Name: ${customer.fullName || customer.facebookName || 'Not provided'}\n`;
+    profile += `Facebook Name: ${customer.facebookName || 'N/A'}\n`;
+    profile += `Contact: ${customer.contactNumber || 'N/A'}\n`;
+    profile += `Email: ${customer.emailAddress || 'N/A'}\n`;
+    profile += `Starlink Email: ${customer.starlinkEmail || 'N/A'}\n`;
+    profile += `Starlink Account: ${customer.starlinkAccount || 'N/A'}\n`;
+    profile += `Preferred Language: ${customer.preferredLang}\n`;
+    profile += `Total Interactions: ${totalInteractions}\n`;
+    
+    if (billingHistory.length > 0) {
+      profile += `\n=== BILLING HISTORY ===\n`;
+      billingHistory.slice(0, 3).forEach((req, i) => {
+        profile += `${i + 1}. Request ${req.requestId}: $${req.billingAmount} for ${req.billingMonth} - Status: ${req.status}\n`;
+      });
+    }
+
+    if (conversationHistory.length > 0) {
+      profile += `\n=== RECENT CONVERSATION ===\n`;
+      const recent = conversationHistory.slice(-5);
+      recent.forEach(msg => {
+        const sender = msg.direction === 'inbound' ? 'Customer' : 'You';
+        profile += `${sender}: ${msg.content.substring(0, 100)}${msg.content.length > 100 ? '...' : ''}\n`;
+      });
+    }
+
+    profile += `========================\n`;
+    return profile;
+  }
+
   async handleWebhookEvent(event: MessengerEvent) {
     if (event.message) {
       await this.handleMessage(event);
@@ -58,7 +124,9 @@ export class MessengerService {
   private async handleMessage(event: MessengerEvent) {
     const psid = event.sender.id;
     const message = event.message!;
-    const customer = await this.customersService.findOrCreate(psid);
+    
+    const context = await this.loadFullCustomerContext(psid, psid);
+    const customer = context.customer;
 
     if (customer.isAdminTakeover) {
       await this.customersService.addConversation(customer.id, {
@@ -84,23 +152,21 @@ export class MessengerService {
     }
 
     if (message.quick_reply) {
-      await this.handleQuickReply(customer, message.quick_reply.payload);
+      await this.handleQuickReply(customer, message.quick_reply.payload, context);
       return;
     }
 
     const text = message.text || '';
     if (!text) return;
 
-    const context = await this.customersService.getConversationContext(customer.id);
-    const sessionStep = context?.sessionStep || 'greeting';
+    const sessionStep = context.conversationContext?.sessionStep || 'greeting';
 
     if (customer.conversationState === 'COLLECTING_INFO' && sessionStep !== 'greeting') {
-      await this.collectBillingInfo(customer, text, context);
+      await this.collectBillingInfo(customer, text, context.conversationContext, context);
       return;
     }
 
-    const conversationHistory = await this.customersService.getConversations(customer.id, 10);
-    const recentContext = conversationHistory.reverse().map(c => c.content);
+    const recentContext = context.conversationHistory.map(c => c.content);
 
     await this.customersService.updateConversationContext(customer.id, {
       recentMessages: recentContext.slice(-10),
@@ -108,12 +174,13 @@ export class MessengerService {
     });
 
     const intent = await this.aiService.detectIntent(text, recentContext);
-    await this.processIntent(customer, text, intent);
+    await this.processIntent(customer, text, intent, context);
   }
 
   private async handlePostback(event: MessengerEvent) {
     const psid = event.sender.id;
-    const customer = await this.customersService.findOrCreate(psid);
+    const context = await this.loadFullCustomerContext(psid, psid);
+    const customer = context.customer;
     const payload = event.postback!.payload;
 
     if (customer.isAdminTakeover) {
@@ -131,60 +198,60 @@ export class MessengerService {
       content: payload,
     });
 
-    await this.handleQuickReply(customer, payload);
+    await this.handleQuickReply(customer, payload, context);
   }
 
-  private async handleQuickReply(customer: any, payload: string) {
+  private async handleQuickReply(customer: any, payload: string, context?: CustomerContext) {
     switch (payload) {
       case 'START_BILLING':
-        await this.startBillingFlow(customer);
+        await this.startBillingFlow(customer, context);
         break;
       case 'CHECK_STATUS':
-        await this.checkStatus(customer);
+        await this.checkStatus(customer, context);
         break;
       case 'FAQ':
-        await this.sendFAQ(customer);
+        await this.sendFAQ(customer, context);
         break;
       case 'ESCALATE':
-        await this.escalateToHuman(customer);
+        await this.escalateToHuman(customer, context);
         break;
       case 'CONFIRM_INFO':
         await this.confirmAndProceed(customer);
         break;
       case 'TALK_TO_BOT':
         await this.customersService.releaseTakeover(customer.id);
-        await this.sendTextMessage(customer.messengerPsid, 'The AI assistant is back. How can I help you?');
+        await this.sendTextMessage(customer.messengerPsid, 'No problem! I\'m back. What can I help you with?');
         break;
       default:
-        await this.sendTextMessage(customer.messengerPsid, "I'm not sure what you mean. Please try again or type HELP for options.");
+        await this.sendTextMessage(customer.messengerPsid, "Hmm, I'm not quite sure what you mean there. Could you try rephrasing that, or just let me know what you need help with?");
     }
   }
 
-  private async processIntent(customer: any, text: string, intent: any) {
+  private async processIntent(customer: any, text: string, intent: any, context: CustomerContext) {
     switch (intent.intent) {
       case 'greeting':
-        await this.sendWelcomeMessage(customer);
+        await this.sendWelcomeMessage(customer, context);
         break;
       case 'billing_inquiry':
       case 'submit_payment':
-        await this.startBillingFlow(customer);
+        await this.startBillingFlow(customer, context);
         break;
       case 'check_status':
-        await this.checkStatus(customer);
+        await this.checkStatus(customer, context);
         break;
       case 'faq':
-        await this.sendFAQ(customer);
+        await this.sendFAQ(customer, context);
         break;
       case 'escalation':
       case 'complaint':
-        await this.escalateToHuman(customer);
+        await this.escalateToHuman(customer, context);
         break;
       default:
-        await this.handleNaturalConversation(customer, text);
+        await this.handleNaturalConversation(customer, text, context);
     }
   }
 
-  private async collectBillingInfo(customer: any, text: string, context: any) {
+  private async collectBillingInfo(customer: any, text: string, context: any, fullContext: CustomerContext) {
     const sessionStep = context?.sessionStep || 'collect_full_name';
     const collected: CollectedData = (context?.collectedData as CollectedData) || {};
 
@@ -224,7 +291,7 @@ export class MessengerService {
         if (!isNaN(amount)) {
           collected.billingAmount = amount;
         } else {
-          await this.sendTextMessage(customer.messengerPsid, 'Please enter a valid amount (e.g., 120.50).');
+          await this.sendTextMessage(customer.messengerPsid, 'No worries, just need the number. Could you try again? Something like 120.50 would work.');
           return;
         }
         break;
@@ -250,21 +317,24 @@ export class MessengerService {
       collectedData: collected,
     });
 
-    await this.promptNextStep(customer, nextStep, collected);
+    await this.promptNextStep(customer, nextStep, collected, fullContext);
   }
 
-  private async promptNextStep(customer: any, step: string, collected: CollectedData) {
+  private async promptNextStep(customer: any, step: string, collected: CollectedData, context: CustomerContext) {
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
+    const nameGreeting = firstName ? `${firstName}, ` : '';
+    
     const prompts: Record<string, string> = {
-      collect_full_name: 'Please provide your full name.',
-      collect_contact: 'Thank you! What is your contact number?',
-      collect_email: 'What is your email address?',
-      collect_starlink_email: 'What is your Starlink account email?',
-      collect_starlink_account: 'What is your Starlink account number? (Type "skip" if you don\'t know)',
-      collect_billing_amount: 'What is the billing amount?',
-      collect_billing_month: 'Which billing month? (e.g., January 2025)',
-      collect_payment_method: 'Which payment method did you use? (KBZPay, WavePay, AYA Pay, CB Pay, Bank Transfer, Cash)',
-      collect_notes: 'Any additional notes? (Type "skip" if none)',
-      confirm_info: this.buildConfirmationMessage(collected),
+      collect_full_name: `Sure thing! Can I get your full name to start with?`,
+      collect_contact: `Got it${firstName ? `, ${firstName}` : ''}! What's the best number to reach you at?`,
+      collect_email: `Perfect. And your email address?`,
+      collect_starlink_email: `Great, thanks! Now, what email did you use for your Starlink account?`,
+      collect_starlink_account: `Do you happen to have your Starlink account number handy? If not, just type "skip" and we can work without it.`,
+      collect_billing_amount: `Alright, what's the billing amount you're looking to pay?`,
+      collect_billing_month: `Which month is this for? (like "January 2025")`,
+      collect_payment_method: `And how did you make the payment? You can choose from KBZPay, WavePay, AYA Pay, CB Pay, Bank Transfer, or Cash.`,
+      collect_notes: `Last thing - anything else I should know about this payment? If not, just type "skip".`,
+      confirm_info: this.buildConfirmationMessage(collected, firstName),
     };
 
     const message = prompts[step] || 'How can I help you?';
@@ -272,37 +342,42 @@ export class MessengerService {
 
     if (step === 'confirm_info') {
       await this.sendQuickReplies(customer.messengerPsid, [
-        { title: 'Confirm', payload: 'CONFIRM_INFO' },
+        { title: 'Looks Good', payload: 'CONFIRM_INFO' },
         { title: 'Start Over', payload: 'START_BILLING' },
       ]);
     }
   }
 
-  private buildConfirmationMessage(collected: CollectedData): string {
-    return `Please confirm your information:\n\n` +
-      `Name: ${collected.fullName || 'N/A'}\n` +
-      `Contact: ${collected.contactNumber || 'N/A'}\n` +
-      `Email: ${collected.emailAddress || 'N/A'}\n` +
-      `Starlink Email: ${collected.starlinkEmail || 'N/A'}\n` +
-      `Starlink Account: ${collected.starlinkAccount || 'N/A'}\n` +
-      `Amount: $${collected.billingAmount || 'N/A'}\n` +
-      `Month: ${collected.billingMonth || 'N/A'}\n` +
-      `Payment Method: ${collected.preferredPayment || 'N/A'}\n` +
-      `Notes: ${collected.additionalNotes || 'None'}\n\n` +
-      `Please confirm to proceed.`;
+  private buildConfirmationMessage(collected: CollectedData, firstName: string): string {
+    return `${firstName ? `Alright ${firstName}, ` : 'Alright, '}here's what I've got:\n\n` +
+      `👤 Name: ${collected.fullName || 'N/A'}\n` +
+      `📱 Contact: ${collected.contactNumber || 'N/A'}\n` +
+      `📧 Email: ${collected.emailAddress || 'N/A'}\n` +
+      `🛰️ Starlink Email: ${collected.starlinkEmail || 'N/A'}\n` +
+      `🔢 Starlink Account: ${collected.starlinkAccount || 'N/A'}\n` +
+      `💰 Amount: $${collected.billingAmount || 'N/A'}\n` +
+      `📅 Month: ${collected.billingMonth || 'N/A'}\n` +
+      `💳 Payment Method: ${collected.preferredPayment || 'N/A'}\n` +
+      `📝 Notes: ${collected.additionalNotes || 'None'}\n\n` +
+      `Does everything look right?`;
   }
 
-  private async handleNaturalConversation(customer: any, text: string) {
-    const conversations = await this.customersService.getConversations(customer.id, 10);
-    const context = conversations.reverse().map(c => `${c.direction === 'inbound' ? 'User' : 'Assistant'}: ${c.content}`);
+  private async handleNaturalConversation(customer: any, text: string, context: CustomerContext) {
+    const conversationHistory = context.conversationHistory;
+    const conversationContext = conversationHistory.map(c => 
+      `${c.direction === 'inbound' ? 'Customer' : 'You'}: ${c.content}`
+    );
 
+    const customerProfile = this.buildCustomerProfile(context);
     const language = customer.preferredLang === 'MY' ? Language.MY : Language.EN;
+
+    const systemPrompt = SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES + customerProfile;
 
     const response = await this.aiService.chat(
       [
-        { role: 'system', content: SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT },
-        ...context.map(c => ({
-          role: c.startsWith('User:') ? 'user' as const : 'assistant' as const,
+        { role: 'system', content: systemPrompt },
+        ...conversationContext.map(c => ({
+          role: c.startsWith('Customer:') ? 'user' as const : 'assistant' as const,
           content: c.substring(c.indexOf(':') + 2),
         })),
         { role: 'user', content: text },
@@ -330,21 +405,38 @@ export class MessengerService {
   private async handleAttachment(customer: any, message: any) {
     const attachment = message.attachments[0];
     if (attachment.type === 'image' || attachment.type === 'file') {
+      const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
       await this.sendTextMessage(customer.messengerPsid,
-        'Thank you for uploading your payment proof! We are processing it now. You will receive a confirmation shortly.');
+        `Thanks${firstName ? `, ${firstName}` : ''}! I've got your payment proof. I'll take a look at it right away and get back to you with a confirmation shortly. 👍`);
 
       await this.customersService.update(customer.id, { conversationState: 'PROCESSING_PAYMENT' });
     }
   }
 
-  private async sendWelcomeMessage(customer: any) {
-    const message = `Hello${customer.facebookName ? ` ${customer.facebookName}` : ''}! 👋
+  private async sendWelcomeMessage(customer: any, context: CustomerContext) {
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
+    const hasHistory = context.totalInteractions > 0;
+    const hasBillingHistory = context.billingHistory.length > 0;
 
-Welcome to our Starlink Billing Assistance Service.
+    let greeting = '';
+    
+    if (hasHistory && firstName) {
+      greeting = `Hey ${firstName}! Good to hear from you again. `;
+      if (hasBillingHistory) {
+        const lastRequest = context.billingHistory[0];
+        greeting += `I see your last request (${lastRequest.requestId}) is ${lastRequest.status.toLowerCase()}. `;
+      }
+    } else if (firstName) {
+      greeting = `Hi ${firstName}! `;
+    } else {
+      greeting = `Hey there! `;
+    }
 
-*Please note: We are an independent third-party billing assistance service and are NOT affiliated with Starlink or SpaceX.*
+    const message = `${greeting}Welcome to our Starlink Billing Assistance Service.
 
-How can I help you today?`;
+Just so you know, we're an independent third-party service - not affiliated with Starlink or SpaceX directly. We're here to help make your billing process smoother.
+
+What can I help you with today?`;
 
     await this.sendTextMessage(customer.messengerPsid, message);
     await this.sendQuickReplies(customer.messengerPsid, [
@@ -355,49 +447,93 @@ How can I help you today?`;
     ]);
   }
 
-  private async startBillingFlow(customer: any) {
+  private async startBillingFlow(customer: any, context?: CustomerContext) {
     await this.customersService.update(customer.id, { conversationState: 'COLLECTING_INFO' });
+    
+    const prefillData: CollectedData = {};
+    if (customer.fullName) prefillData.fullName = customer.fullName;
+    if (customer.contactNumber) prefillData.contactNumber = customer.contactNumber;
+    if (customer.emailAddress) prefillData.emailAddress = customer.emailAddress;
+    if (customer.starlinkEmail) prefillData.starlinkEmail = customer.starlinkEmail;
+    if (customer.starlinkAccount) prefillData.starlinkAccount = customer.starlinkAccount;
+
+    const hasPrefilled = Object.keys(prefillData).length > 0;
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
+
+    let message = '';
+    let nextStep = 'collect_full_name';
+
+    if (hasPrefilled) {
+      message = `${firstName ? `Alright ${firstName}, ` : ''}let's get this billing submission started. I've got some of your info already, so this should be quick!`;
+      
+      if (prefillData.fullName) {
+        nextStep = 'collect_contact';
+        message += `\n\nI already have your name as ${prefillData.fullName}. What's the best number to reach you at?`;
+      }
+    } else {
+      message = `Sure thing! Let's get your billing submission started. Can I get your full name to begin with?`;
+    }
+
     await this.customersService.updateConversationContext(customer.id, {
-      sessionStep: 'collect_full_name',
-      collectedData: {},
+      sessionStep: nextStep,
+      collectedData: prefillData,
     });
-    await this.sendTextMessage(customer.messengerPsid,
-      "Great! Let's start your billing submission.\n\nPlease provide your full name to begin.");
+
+    await this.sendTextMessage(customer.messengerPsid, message);
   }
 
-  private async checkStatus(customer: any) {
-    const requests = await this.billingService.findByCustomer(customer.id);
-    if (requests.data.length === 0) {
-      await this.sendTextMessage(customer.messengerPsid, "You don't have any billing requests yet. Would you like to submit one?");
+  private async checkStatus(customer: any, context?: CustomerContext) {
+    const billingHistory = context?.billingHistory || [];
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
+
+    if (billingHistory.length === 0) {
+      await this.sendTextMessage(customer.messengerPsid, 
+        `${firstName ? `Hey ${firstName}, ` : ''}looks like you don't have any billing requests yet. Want to submit one now?`);
       return;
     }
-    const latest = requests.data[0];
+
+    const latest = billingHistory[0];
+    const statusEmoji = latest.status === 'APPROVED' ? '✅' : 
+                       latest.status === 'REJECTED' ? '❌' : 
+                       latest.status === 'PROCESSING' ? '⏳' : '📋';
+
     await this.sendTextMessage(customer.messengerPsid,
-      `Your latest billing request (${latest.requestId}):\nStatus: ${latest.status}\nAmount: $${latest.billingAmount}\nMonth: ${latest.billingMonth}`);
+      `${firstName ? `${firstName}, ` : ''}here's your latest billing request:\n\n` +
+      `${statusEmoji} Request ID: ${latest.requestId}\n` +
+      `💰 Amount: $${latest.billingAmount}\n` +
+      `📅 Month: ${latest.billingMonth}\n` +
+      `📊 Status: ${latest.status}\n\n` +
+      `Need help with anything else?`);
   }
 
-  private async sendFAQ(customer: any) {
+  private async sendFAQ(customer: any, context?: CustomerContext) {
+    const customerProfile = context ? this.buildCustomerProfile(context) : '';
+    const language = customer.preferredLang === 'MY' ? Language.MY : Language.EN;
+
     const faqResponse = await this.aiService.chat(
       [
-        { role: 'system', content: SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT },
-        { role: 'user', content: 'What are the frequently asked questions?' },
+        { role: 'system', content: SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES + customerProfile },
+        { role: 'user', content: 'What are the most common questions people ask? Give me a friendly overview.' },
       ],
       'FAQ questions',
-      customer.preferredLang === 'MY' ? Language.MY : Language.EN,
+      language,
     );
 
     await this.sendTextMessage(customer.messengerPsid, faqResponse.text);
   }
 
-  private async escalateToHuman(customer: any) {
+  private async escalateToHuman(customer: any, context?: CustomerContext) {
     await this.customersService.update(customer.id, { conversationState: 'ESCALATED' });
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
+    
     await this.sendTextMessage(customer.messengerPsid,
-      "I've escalated your request to a human agent. Someone will get back to you shortly. Thank you for your patience!");
+      `${firstName ? `No problem, ${firstName}.` : 'No problem.'} I'll get one of our team members to help you out. They'll be with you shortly. Thanks for your patience! 🙏`);
   }
 
   private async confirmAndProceed(customer: any) {
     const context = await this.customersService.getConversationContext(customer.id);
     const collected: CollectedData = (context?.collectedData as CollectedData) || {};
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
 
     try {
       await this.billingService.create({
@@ -419,11 +555,11 @@ How can I help you today?`;
       });
 
       await this.sendTextMessage(customer.messengerPsid,
-        "Your billing request has been submitted! Please upload your payment proof (screenshot, receipt, or PDF).");
+        `${firstName ? `Awesome, ${firstName}!` : 'Awesome!'} Your billing request is all set. Now just upload your payment proof - that can be a screenshot, receipt, or PDF. I'll take it from there.`);
     } catch (error) {
       this.logger.error('Failed to create billing request', error);
       await this.sendTextMessage(customer.messengerPsid,
-        "Sorry, there was an error submitting your request. Please try again or contact support.");
+        `Hmm, something went wrong while submitting your request. Let's try again, or if you prefer, I can get a human to help you out.`);
     }
   }
 

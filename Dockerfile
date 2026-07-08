@@ -50,6 +50,10 @@ RUN mkdir -p backend/uploads
 # Copy ecosystem config
 COPY ecosystem.config.js ./
 
+# Copy startup script
+COPY start.sh ./
+RUN chmod +x start.sh
+
 EXPOSE 3000 3001
 
-CMD ["pm2-runtime", "start", "ecosystem.config.js"]
+CMD ["./start.sh"]

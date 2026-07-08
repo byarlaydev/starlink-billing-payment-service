@@ -24,6 +24,14 @@ export class PlaygroundController {
       const language = body.language === 'MY' ? Language.MY : Language.EN;
       const systemPrompt = SYSTEM_PROMPT + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
 
+      // Test: check KB search first
+      try {
+        const kbResult = await this.aiService['buildKnowledgeContext'](body.message, language);
+        this.logger.log(`KB search returned: ${kbResult ? 'non-empty' : 'empty'}`);
+      } catch (kbErr: any) {
+        this.logger.error(`KB search failed: ${kbErr.message}`, kbErr.stack);
+      }
+
       const response = await this.aiService.chat(
         [
           { role: 'system', content: systemPrompt },
@@ -36,7 +44,7 @@ export class PlaygroundController {
       return { success: true, data: response };
     } catch (error: any) {
       this.logger.error(`Playground chat failed: ${error.message}`, error.stack);
-      throw error;
+      return { success: false, message: error.message, stack: error.stack?.split('\n').slice(0, 3).join('\n') };
     }
   }
 }

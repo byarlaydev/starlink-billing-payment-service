@@ -4,6 +4,9 @@ import { QueueService } from './queue.service';
 import { OCRProcessor } from './processors/ocr.processor';
 import { NotificationProcessor } from './processors/notification.processor';
 import { AIProcessor } from './processors/ai.processor';
+import { OCRModule } from '../ocr/ocr.module';
+import { TelegramModule } from '../telegram/telegram.module';
+import { AIModule } from '../../ai/ai.module';
 
 @Module({
   imports: [
@@ -19,6 +22,9 @@ import { AIProcessor } from './processors/ai.processor';
       { name: 'ai' },
       { name: 'backups' },
     ),
+    OCRModule,
+    TelegramModule,
+    AIModule,
   ],
   providers: [QueueService, OCRProcessor, NotificationProcessor, AIProcessor],
   exports: [QueueService, BullModule],

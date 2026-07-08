@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import {
   AIProvider,
   AIProviderConfig,
@@ -15,18 +14,15 @@ import { PAYMENT_PROOF_EXTRACTION_PROMPT, INTENT_DETECTION_PROMPT } from '../pro
 export class GeminiProvider implements AIProvider {
   readonly name = 'gemini';
   private readonly logger = new Logger(GeminiProvider.name);
-  private genAI: GoogleGenerativeAI;
   private currentApiKey: string;
 
   constructor(private readonly configService: ConfigService) {
     this.currentApiKey = this.configService.get<string>('GEMINI_API_KEY', '');
-    this.genAI = new GoogleGenerativeAI(this.currentApiKey);
   }
 
   setApiKey(apiKey: string): void {
     if (apiKey && apiKey !== this.currentApiKey) {
       this.currentApiKey = apiKey;
-      this.genAI = new GoogleGenerativeAI(apiKey);
       this.logger.log('Gemini API key updated');
     }
   }
@@ -44,13 +40,9 @@ export class GeminiProvider implements AIProvider {
     const startTime = Date.now();
     const cfg = { ...this.getConfig(), ...config };
 
-    const model = this.genAI.getGenerativeModel({
-      model: cfg.model,
-      generationConfig: {
-        temperature: cfg.temperature,
-        maxOutputTokens: cfg.maxOutputTokens,
-      },
-    });
+    if (!cfg.apiKey) {
+      throw new Error('Gemini API key is not configured');
+    }
 
     const systemInstruction = messages.find(m => m.role === 'system')?.content;
     const chatMessages = messages.filter(m => m.role !== 'system');
@@ -60,17 +52,36 @@ export class GeminiProvider implements AIProvider {
       parts: [{ text: m.content }],
     }));
 
-    const result = await model.generateContent({
-      systemInstruction,
-      contents,
+    const body: Record<string, any> = { contents };
+    if (systemInstruction) {
+      body.system_instruction = { parts: [{ text: systemInstruction }] };
+    }
+    body.generationConfig = {
+      temperature: cfg.temperature,
+      maxOutputTokens: cfg.maxOutputTokens,
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
-    const lastResponse = result.response.text();
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+    }
+
+    const data: any = await response.json();
+    const lastResponse = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
     const latencyMs = Date.now() - startTime;
 
     return {
       text: lastResponse,
-      tokensUsed: 0,
+      tokensUsed: data?.usageMetadata?.promptTokenCount ?? 0,
       latencyMs,
       model: cfg.model,
     };
@@ -85,23 +96,44 @@ export class GeminiProvider implements AIProvider {
     const startTime = Date.now();
     const cfg = { ...this.getConfig(), ...config };
 
-    const model = this.genAI.getGenerativeModel({
-      model: cfg.model,
+    if (!cfg.apiKey) {
+      throw new Error('Gemini API key is not configured');
+    }
+
+    const imageBase64 = imageBuffer.toString('base64');
+    const body = {
+      contents: [{
+        role: 'user',
+        parts: [
+          { text: prompt },
+          { inlineData: { mimeType, data: imageBase64 } },
+        ],
+      }],
       generationConfig: {
         temperature: cfg.temperature,
         maxOutputTokens: cfg.maxOutputTokens,
       },
+    };
+
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${cfg.model}:generateContent?key=${encodeURIComponent(cfg.apiKey)}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
     });
 
-    const imageBase64 = imageBuffer.toString('base64');
-    const result = await model.generateContent([
-      prompt,
-      { inlineData: { data: imageBase64, mimeType } },
-    ]);
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Gemini API error (${response.status}): ${errorText}`);
+    }
+
+    const data: any = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
 
     return {
-      text: result.response.text(),
-      tokensUsed: 0,
+      text,
+      tokensUsed: data?.usageMetadata?.promptTokenCount ?? 0,
       latencyMs: Date.now() - startTime,
       model: cfg.model,
     };

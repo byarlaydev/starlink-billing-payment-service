@@ -16,10 +16,19 @@ export class GeminiProvider implements AIProvider {
   readonly name = 'gemini';
   private readonly logger = new Logger(GeminiProvider.name);
   private genAI: GoogleGenerativeAI;
+  private currentApiKey: string;
 
   constructor(private readonly configService: ConfigService) {
-    const apiKey = this.configService.get<string>('GEMINI_API_KEY', '');
-    this.genAI = new GoogleGenerativeAI(apiKey);
+    this.currentApiKey = this.configService.get<string>('GEMINI_API_KEY', '');
+    this.genAI = new GoogleGenerativeAI(this.currentApiKey);
+  }
+
+  setApiKey(apiKey: string): void {
+    if (apiKey && apiKey !== this.currentApiKey) {
+      this.currentApiKey = apiKey;
+      this.genAI = new GoogleGenerativeAI(apiKey);
+      this.logger.log('Gemini API key updated');
+    }
   }
 
   private getConfig(): AIProviderConfig {

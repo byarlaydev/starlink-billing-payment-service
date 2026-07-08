@@ -87,6 +87,9 @@ export class AIService {
     }
     
     const config = await this.getEffectiveConfig();
+    if (config.apiKey) {
+      this.geminiProvider.setApiKey(config.apiKey);
+    }
     return this.currentProvider.chat(messages, config);
   }
 
@@ -95,6 +98,10 @@ export class AIService {
   }
 
   async detectIntent(message: string, context?: string[]): Promise<IntentResult> {
+    const config = await this.getEffectiveConfig();
+    if (config.apiKey) {
+      this.geminiProvider.setApiKey(config.apiKey);
+    }
     return this.currentProvider.detectIntent(message, context);
   }
 

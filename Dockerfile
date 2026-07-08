@@ -34,9 +34,9 @@ COPY backend/package.json backend/package-lock.json ./backend/
 RUN cd backend && npm ci --omit=dev
 
 # Copy backend build
-COPY --from=backend-builder /app/backend/dist ./backend/dist
-COPY --from=backend-builder /app/backend/node_modules/.prisma ./backend/node_modules/.prisma
-COPY --from=backend-builder /app/backend/node_modules/@prisma ./backend/node_modules/@prisma
+COPY --from=backend-builder /app/dist ./backend/dist
+COPY --from=backend-builder /app/node_modules/.prisma ./backend/node_modules/.prisma
+COPY --from=backend-builder /app/node_modules/@prisma ./backend/node_modules/@prisma
 COPY backend/prisma ./backend/prisma
 
 # Copy frontend build

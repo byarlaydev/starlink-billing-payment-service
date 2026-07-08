@@ -23,6 +23,7 @@ export class PlaygroundController {
     const systemPrompt = await this.aiService.getEffectiveSystemPrompt();
 
     try {
+      this.logger.log(`System prompt length=${systemPrompt.length}, first 50 chars="${systemPrompt.substring(0, 50)}"`);
       const response = await this.aiService.chat(
         [
           { role: 'system', content: systemPrompt },
@@ -34,7 +35,15 @@ export class PlaygroundController {
       return response;
     } catch (error: any) {
       this.logger.error(`Chat failed: ${error.message}`);
-      return { text: `⚠️ AI Error: ${error.message}` };
+      this.logger.error(`Stack: ${error.stack}`);
+      return {
+        text: `⚠️ AI Error: ${error.message}`,
+        debug: {
+          systemPromptLength: systemPrompt.length,
+          systemPromptFirst50: systemPrompt.substring(0, 50),
+          systemPromptCodes: [...systemPrompt.substring(0, 10)].map(c => c.charCodeAt(0)),
+        },
+      };
     }
   }
 }

@@ -6,6 +6,37 @@ import { formatDate, cn } from '@/lib/utils';
 import { Search, Plus, Edit, Trash2, Globe, DollarSign } from 'lucide-react';
 import { toast } from 'sonner';
 
+const currencyNames: Record<string, string> = {
+  USD: 'US Dollar',
+  EUR: 'Euro',
+  GBP: 'British Pound',
+  MMK: 'Myanmar Kyat',
+  THB: 'Thai Baht',
+  SGD: 'Singapore Dollar',
+  MYR: 'Malaysian Ringgit',
+  IDR: 'Indonesian Rupiah',
+  PHP: 'Philippine Peso',
+  VND: 'Vietnamese Dong',
+  KRW: 'South Korean Won',
+  JPY: 'Japanese Yen',
+  CNY: 'Chinese Yuan',
+  INR: 'Indian Rupee',
+  BDT: 'Bangladeshi Taka',
+  LKR: 'Sri Lankan Rupee',
+  PKR: 'Pakistani Rupee',
+  NPR: 'Nepalese Rupee',
+  AUD: 'Australian Dollar',
+  CAD: 'Canadian Dollar',
+  CHF: 'Swiss Franc',
+  NZD: 'New Zealand Dollar',
+  HKD: 'Hong Kong Dollar',
+  TWD: 'Taiwan Dollar',
+};
+
+function getCurrencyName(code: string): string {
+  return currencyNames[code] || code;
+}
+
 interface RegionPlan {
   id: string;
   region: string;
@@ -126,7 +157,7 @@ export default function RegionPlanPage() {
                     {rp.price && (
                       <span className="flex items-center gap-1 text-sm text-gray-600">
                         <DollarSign className="w-4 h-4" />
-                        {rp.price} {rp.currency}/month
+                        {rp.price} {getCurrencyName(rp.currency)}/month
                       </span>
                     )}
                   </div>
@@ -308,10 +339,30 @@ function RegionPlanModal({
                 onChange={(e) => setFormData({ ...formData, currency: e.target.value })}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
               >
-                <option value="USD">USD</option>
-                <option value="EUR">EUR</option>
-                <option value="GBP">GBP</option>
-                <option value="MMK">MMK</option>
+                <option value="USD">USD - US Dollar</option>
+                <option value="EUR">EUR - Euro</option>
+                <option value="GBP">GBP - British Pound</option>
+                <option value="MMK">MMK - Myanmar Kyat</option>
+                <option value="THB">THB - Thai Baht</option>
+                <option value="SGD">SGD - Singapore Dollar</option>
+                <option value="MYR">MYR - Malaysian Ringgit</option>
+                <option value="IDR">IDR - Indonesian Rupiah</option>
+                <option value="PHP">PHP - Philippine Peso</option>
+                <option value="VND">VND - Vietnamese Dong</option>
+                <option value="KRW">KRW - South Korean Won</option>
+                <option value="JPY">JPY - Japanese Yen</option>
+                <option value="CNY">CNY - Chinese Yuan</option>
+                <option value="INR">INR - Indian Rupee</option>
+                <option value="BDT">BDT - Bangladeshi Taka</option>
+                <option value="LKR">LKR - Sri Lankan Rupee</option>
+                <option value="PKR">PKR - Pakistani Rupee</option>
+                <option value="NPR">NPR - Nepalese Rupee</option>
+                <option value="AUD">AUD - Australian Dollar</option>
+                <option value="CAD">CAD - Canadian Dollar</option>
+                <option value="CHF">CHF - Swiss Franc</option>
+                <option value="NZD">NZD - New Zealand Dollar</option>
+                <option value="HKD">HKD - Hong Kong Dollar</option>
+                <option value="TWD">TWD - Taiwan Dollar</option>
               </select>
             </div>
           </div>

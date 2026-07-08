@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { formatDate, cn } from '@/lib/utils';
 import { getErrorMessage } from '@/lib/error-utils';
-import { StatusDialog } from '@/components/ui/status-dialog';
+import { toast } from 'sonner';
 import {
   BarChart3,
   Users,
@@ -85,9 +85,6 @@ export default function DashboardPage() {
   const [recentBilling, setRecentBilling] = useState<RecentBilling[]>([]);
   const [recentCustomers, setRecentCustomers] = useState<RecentCustomer[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusDialog, setStatusDialog] = useState<{
-    open: boolean; type: 'success' | 'error'; title: string; message?: string;
-  }>({ open: false, type: 'success', title: '' });
 
   useEffect(() => {
     const fetchData = async () => {
@@ -120,7 +117,7 @@ export default function DashboardPage() {
         setRecentBilling(recentBillingRes.data.data.data);
         setRecentCustomers(recentCustomersRes.data.data.data);
       } catch (err) {
-        setStatusDialog({ open: true, type: 'error', title: 'Failed to Load', message: getErrorMessage(err) });
+        toast.error(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -490,13 +487,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      <StatusDialog
-        open={statusDialog.open}
-        type={statusDialog.type}
-        title={statusDialog.title}
-        message={statusDialog.message}
-        onClose={() => setStatusDialog({ ...statusDialog, open: false })}
-      />
     </div>
   );
 }

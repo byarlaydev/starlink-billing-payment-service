@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { formatDate, cn } from '@/lib/utils';
 import { getErrorMessage } from '@/lib/error-utils';
-import { StatusDialog } from '@/components/ui/status-dialog';
+import { toast } from 'sonner';
 import { Search, Send, MessageSquare, Phone, Mail, Globe, Bot, UserCheck, UserX, Loader2 } from 'lucide-react';
 
 interface Customer {
@@ -43,9 +43,6 @@ export default function MessengerPage() {
   const [loadingConversations, setLoadingConversations] = useState(false);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
-  const [statusDialog, setStatusDialog] = useState<{
-    open: boolean; type: 'success' | 'error'; title: string; message?: string;
-  }>({ open: false, type: 'success', title: '' });
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = useCallback(() => {
@@ -64,7 +61,7 @@ export default function MessengerPage() {
       const res = await api.get('/customers', { params });
       setCustomers(res.data.data.data);
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Failed to Load', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     } finally {
       setLoadingCustomers(false);
     }
@@ -81,7 +78,7 @@ export default function MessengerPage() {
       const res = await api.get(`/customers/${customer.id}/conversations`);
       setConversations(res.data.data.reverse());
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Failed to Load Conversations', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     } finally {
       setLoadingConversations(false);
     }
@@ -92,9 +89,9 @@ export default function MessengerPage() {
     try {
       const res = await api.put(`/customers/${selectedCustomer.id}/takeover`, { adminId: user.id });
       setSelectedCustomer(res.data.data);
-      setStatusDialog({ open: true, type: 'success', title: 'Takeover Activated', message: 'You are now managing this conversation.' });
+      toast.success('You are now managing this conversation.');
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Takeover Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -103,9 +100,9 @@ export default function MessengerPage() {
     try {
       const res = await api.put(`/customers/${selectedCustomer.id}/release`);
       setSelectedCustomer(res.data.data);
-      setStatusDialog({ open: true, type: 'success', title: 'Takeover Released', message: 'Bot will resume handling the conversation.' });
+      toast.success('Bot will resume handling the conversation.');
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Release Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -121,7 +118,7 @@ export default function MessengerPage() {
       const res = await api.get(`/customers/${selectedCustomer.id}/conversations`);
       setConversations(res.data.data.reverse());
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Send Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     } finally {
       setSending(false);
     }
@@ -340,13 +337,6 @@ export default function MessengerPage() {
         )}
       </div>
 
-      <StatusDialog
-        open={statusDialog.open}
-        type={statusDialog.type}
-        title={statusDialog.title}
-        message={statusDialog.message}
-        onClose={() => setStatusDialog({ ...statusDialog, open: false })}
-      />
     </div>
   );
 }

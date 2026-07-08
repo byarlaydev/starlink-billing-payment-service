@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
 import { Search, Plus, Edit, Trash2, Star, Satellite } from 'lucide-react';
-import { StatusDialog } from '@/components/ui/status-dialog';
+import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
 import { Select } from '@/components/ui/select';
 
@@ -49,13 +49,6 @@ export default function StarlinkAccountsPage() {
   const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editingAccount, setEditingAccount] = useState<StarlinkAccount | null>(null);
-  const [statusDialog, setStatusDialog] = useState<{
-    open: boolean;
-    type: 'success' | 'error';
-    title: string;
-    message?: string;
-  }>({ open: false, type: 'success', title: '' });
-
   const fetchAccounts = async () => {
     setLoading(true);
     try {
@@ -79,20 +72,20 @@ export default function StarlinkAccountsPage() {
     if (!confirm('Are you sure you want to delete this Starlink account?')) return;
     try {
       await api.delete(`/starlink-accounts/${id}`);
-      setStatusDialog({ open: true, type: 'success', title: 'Deleted', message: 'Starlink account has been deleted.' });
+      toast.success('Starlink account has been deleted.');
       fetchAccounts();
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Delete Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     }
   };
 
   const handleSetPrimary = async (id: string) => {
     try {
       await api.put(`/starlink-accounts/${id}/set-primary`);
-      setStatusDialog({ open: true, type: 'success', title: 'Primary Updated', message: 'Account has been set as primary.' });
+      toast.success('Account has been set as primary.');
       fetchAccounts();
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Update Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -267,17 +260,8 @@ export default function StarlinkAccountsPage() {
             setEditingAccount(null);
           }}
           onRefresh={fetchAccounts}
-          onStatus={setStatusDialog}
         />
       )}
-
-      <StatusDialog
-        open={statusDialog.open}
-        type={statusDialog.type}
-        title={statusDialog.title}
-        message={statusDialog.message}
-        onClose={() => setStatusDialog({ ...statusDialog, open: false })}
-      />
     </div>
   );
 }
@@ -286,12 +270,10 @@ function AccountModal({
   account,
   onClose,
   onRefresh,
-  onStatus,
 }: {
   account: StarlinkAccount | null;
   onClose: () => void;
   onRefresh: () => void;
-  onStatus: (status: { open: boolean; type: 'success' | 'error'; title: string; message?: string }) => void;
 }) {
   const [formData, setFormData] = useState({
     customerId: account?.customerId || '',
@@ -335,15 +317,15 @@ function AccountModal({
       };
       if (account) {
         await api.put(`/starlink-accounts/${account.id}`, submitData);
-        onStatus({ open: true, type: 'success', title: 'Updated', message: 'Starlink account has been updated.' });
+        toast.success('Starlink account has been updated.');
       } else {
         await api.post('/starlink-accounts', submitData);
-        onStatus({ open: true, type: 'success', title: 'Created', message: 'Starlink account has been created.' });
+        toast.success('Starlink account has been created.');
       }
       onRefresh();
       onClose();
     } catch (err) {
-      onStatus({ open: true, type: 'error', title: 'Save Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

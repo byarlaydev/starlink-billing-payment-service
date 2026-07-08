@@ -5,7 +5,7 @@ import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
 import { Search, Plus, Edit, Trash2, Globe, DollarSign } from 'lucide-react';
 import { CurrencyDropdown } from '@/components/ui/currency-dropdown';
-import { StatusDialog } from '@/components/ui/status-dialog';
+import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
 
 const currencyNames: Record<string, string> = {
@@ -59,13 +59,6 @@ export default function RegionPlanPage() {
   const [total, setTotal] = useState(0);
   const [showModal, setShowModal] = useState(false);
   const [editingRegionPlan, setEditingRegionPlan] = useState<RegionPlan | null>(null);
-  const [statusDialog, setStatusDialog] = useState<{
-    open: boolean;
-    type: 'success' | 'error';
-    title: string;
-    message?: string;
-  }>({ open: false, type: 'success', title: '' });
-
   const fetchRegionPlans = async () => {
     setLoading(true);
     try {
@@ -89,20 +82,20 @@ export default function RegionPlanPage() {
     if (!confirm('Are you sure you want to delete this region and plan?')) return;
     try {
       await api.delete(`/region-plan/${id}`);
-      setStatusDialog({ open: true, type: 'success', title: 'Deleted', message: 'Region and plan has been deleted.' });
+      toast.success('Region and plan has been deleted.');
       fetchRegionPlans();
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Delete Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     }
   };
 
   const handleToggleActive = async (id: string, isActive: boolean) => {
     try {
       await api.put(`/region-plan/${id}`, { isActive: !isActive });
-      setStatusDialog({ open: true, type: 'success', title: !isActive ? 'Activated' : 'Deactivated', message: `Region and plan has been ${!isActive ? 'activated' : 'deactivated'}.` });
+      toast.success(`Region and plan has been ${!isActive ? 'activated' : 'deactivated'}.`);
       fetchRegionPlans();
     } catch (err) {
-      setStatusDialog({ open: true, type: 'error', title: 'Update Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     }
   };
 
@@ -238,17 +231,8 @@ export default function RegionPlanPage() {
             setEditingRegionPlan(null);
           }}
           onRefresh={fetchRegionPlans}
-          onStatus={setStatusDialog}
         />
       )}
-
-      <StatusDialog
-        open={statusDialog.open}
-        type={statusDialog.type}
-        title={statusDialog.title}
-        message={statusDialog.message}
-        onClose={() => setStatusDialog({ ...statusDialog, open: false })}
-      />
     </div>
   );
 }
@@ -257,12 +241,10 @@ function RegionPlanModal({
   regionPlan,
   onClose,
   onRefresh,
-  onStatus,
 }: {
   regionPlan: RegionPlan | null;
   onClose: () => void;
   onRefresh: () => void;
-  onStatus: (status: { open: boolean; type: 'success' | 'error'; title: string; message?: string }) => void;
 }) {
   const [formData, setFormData] = useState({
     region: regionPlan?.region || '',
@@ -284,16 +266,16 @@ function RegionPlanModal({
       };
       if (regionPlan) {
         await api.put(`/region-plan/${regionPlan.id}`, submitData);
-        onStatus({ open: true, type: 'success', title: 'Updated', message: 'Region and plan has been updated.' });
+        toast.success('Region and plan has been updated.');
       } else {
         const { isActive, ...createData } = submitData;
         await api.post('/region-plan', createData);
-        onStatus({ open: true, type: 'success', title: 'Created', message: 'Region and plan has been created.' });
+        toast.success('Region and plan has been created.');
       }
       onRefresh();
       onClose();
     } catch (err) {
-      onStatus({ open: true, type: 'error', title: 'Save Failed', message: getErrorMessage(err) });
+      toast.error(getErrorMessage(err));
     } finally {
       setSubmitting(false);
     }

@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AIProvider, AIProviderConfig, ChatMessage, ChatResponse, OCRResult, IntentResult } from './interfaces/ai-provider.interface';
 import { GeminiProvider } from './providers/gemini.provider';
+import { KnowledgeBaseService } from '../modules/knowledge-base/knowledge-base.service';
+import { Language } from '@prisma/client';
 
 @Injectable()
 export class AIService {
@@ -11,6 +13,7 @@ export class AIService {
   constructor(
     private readonly configService: ConfigService,
     private readonly geminiProvider: GeminiProvider,
+    private readonly knowledgeBaseService: KnowledgeBaseService,
   ) {
     this.currentProvider = this.geminiProvider;
   }
@@ -33,7 +36,28 @@ export class AIService {
     };
   }
 
-  async chat(messages: ChatMessage[]): Promise<ChatResponse> {
+  async buildKnowledgeContext(query: string, language: Language = Language.EN): Promise<string> {
+    const relevantEntries = await this.knowledgeBaseService.searchForAI(query, language, 5);
+    
+    if (relevantEntries.length === 0) {
+      return '';
+    }
+
+    const context = relevantEntries.map(entry => {
+      return `[${entry.category}] ${entry.title}\n${entry.content}`;
+    }).join('\n\n');
+
+    return `\n\nRelevant Knowledge Base:\n${context}`;
+  }
+
+  async chat(messages: ChatMessage[], knowledgeQuery?: string, language?: Language): Promise<ChatResponse> {
+    if (knowledgeQuery) {
+      const knowledgeContext = await this.buildKnowledgeContext(knowledgeQuery, language);
+      if (knowledgeContext && messages.length > 0 && messages[0].role === 'system') {
+        messages[0].content += knowledgeContext;
+      }
+    }
+    
     return this.currentProvider.chat(messages);
   }
 

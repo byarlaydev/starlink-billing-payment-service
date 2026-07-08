@@ -1,6 +1,6 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../config/prisma.service';
-import { ConversationState, Language } from '@prisma/client';
+import { ConversationState, Language, DataReviewStatus } from '@prisma/client';
 
 @Injectable()
 export class CustomersService {
@@ -19,7 +19,12 @@ export class CustomersService {
         data: {
           messengerPsid: psid,
           facebookName: facebookName || null,
+          dataCollectedBy: 'bot',
+          reviewStatus: 'PENDING_REVIEW',
         },
+      });
+      await this.prisma.conversationContext.create({
+        data: { customerId: customer.id },
       });
       this.logger.log(`New customer created: ${psid}`);
     } else if (facebookName && !customer.facebookName) {
@@ -39,6 +44,8 @@ export class CustomersService {
     starlinkAccount?: string;
     preferredLang?: Language;
     conversationState?: ConversationState;
+    isAdminTakeover?: boolean;
+    takeoverAdminId?: string;
   }) {
     return this.prisma.customer.update({ where: { id: customerId }, data });
   }
@@ -46,23 +53,186 @@ export class CustomersService {
   async findById(id: string) {
     const customer = await this.prisma.customer.findUnique({
       where: { id },
-      include: { billingRequests: { orderBy: { createdAt: 'desc' }, take: 10 } },
+      include: {
+        billingRequests: { orderBy: { createdAt: 'desc' }, take: 10 },
+        conversationContext: true,
+      },
     });
     if (!customer) throw new NotFoundException('Customer not found');
     return customer;
   }
 
-  async findAll(page = 1, limit = 20) {
+  async findAll(filter?: {
+    page?: number;
+    limit?: number;
+    search?: string;
+    reviewStatus?: DataReviewStatus;
+  }) {
+    const where: any = {};
+    if (filter?.reviewStatus) where.reviewStatus = filter.reviewStatus;
+    if (filter?.search) {
+      where.OR = [
+        { fullName: { contains: filter.search, mode: 'insensitive' } },
+        { facebookName: { contains: filter.search, mode: 'insensitive' } },
+        { contactNumber: { contains: filter.search } },
+        { emailAddress: { contains: filter.search, mode: 'insensitive' } },
+        { messengerPsid: { contains: filter.search } },
+        { starlinkEmail: { contains: filter.search, mode: 'insensitive' } },
+        { starlinkAccount: { contains: filter.search, mode: 'insensitive' } },
+      ];
+    }
+
+    const page = filter?.page || 1;
+    const limit = filter?.limit || 20;
+
     const [data, total] = await Promise.all([
       this.prisma.customer.findMany({
+        where,
         skip: (page - 1) * limit,
         take: limit,
         orderBy: { createdAt: 'desc' },
-        include: { _count: { select: { billingRequests: true } } },
+        include: {
+          _count: { select: { billingRequests: true, conversations: true } },
+        },
       }),
-      this.prisma.customer.count(),
+      this.prisma.customer.count({ where }),
     ]);
     return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async findPendingReview(page = 1, limit = 20) {
+    return this.findAll({ page, limit, reviewStatus: 'PENDING_REVIEW' });
+  }
+
+  async adminCreate(data: {
+    messengerPsid?: string;
+    fullName: string;
+    facebookName?: string;
+    contactNumber?: string;
+    emailAddress?: string;
+    starlinkEmail?: string;
+    starlinkAccount?: string;
+    preferredLang?: Language;
+    adminId: string;
+  }) {
+    const customer = await this.prisma.customer.create({
+      data: {
+        messengerPsid: data.messengerPsid || `ADMIN_${Date.now()}`,
+        fullName: data.fullName,
+        facebookName: data.facebookName,
+        contactNumber: data.contactNumber,
+        emailAddress: data.emailAddress,
+        starlinkEmail: data.starlinkEmail,
+        starlinkAccount: data.starlinkAccount,
+        preferredLang: data.preferredLang || Language.EN,
+        dataCollectedBy: 'admin',
+        reviewStatus: 'APPROVED',
+        reviewedBy: data.adminId,
+        reviewedAt: new Date(),
+      },
+    });
+
+    await this.prisma.conversationContext.create({
+      data: { customerId: customer.id },
+    });
+
+    await this.prisma.activityLog.create({
+      data: {
+        actorId: data.adminId,
+        actorType: 'admin',
+        action: 'CREATE',
+        description: `Customer created by admin: ${data.fullName}`,
+        metadata: { customerId: customer.id },
+      },
+    });
+
+    return customer;
+  }
+
+  async adminUpdate(customerId: string, data: {
+    fullName?: string;
+    facebookName?: string;
+    contactNumber?: string;
+    emailAddress?: string;
+    starlinkEmail?: string;
+    starlinkAccount?: string;
+    preferredLang?: Language;
+    adminId: string;
+  }) {
+    const customer = await this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        fullName: data.fullName,
+        facebookName: data.facebookName,
+        contactNumber: data.contactNumber,
+        emailAddress: data.emailAddress,
+        starlinkEmail: data.starlinkEmail,
+        starlinkAccount: data.starlinkAccount,
+        preferredLang: data.preferredLang,
+      },
+    });
+
+    await this.prisma.activityLog.create({
+      data: {
+        actorId: data.adminId,
+        actorType: 'admin',
+        action: 'UPDATE',
+        description: `Customer updated by admin: ${customer.fullName}`,
+        metadata: { customerId, changes: data },
+      },
+    });
+
+    return customer;
+  }
+
+  async reviewCustomer(customerId: string, data: {
+    reviewStatus: DataReviewStatus;
+    adminId: string;
+    reviewNotes?: string;
+  }) {
+    const customer = await this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        reviewStatus: data.reviewStatus,
+        reviewedBy: data.adminId,
+        reviewedAt: new Date(),
+        reviewNotes: data.reviewNotes,
+      },
+    });
+
+    await this.prisma.activityLog.create({
+      data: {
+        actorId: data.adminId,
+        actorType: 'admin',
+        action: data.reviewStatus === 'APPROVED' ? 'APPROVE' : 'REJECT',
+        description: `Customer review: ${data.reviewStatus} - ${customer.fullName}`,
+        metadata: { customerId, reviewStatus: data.reviewStatus, reviewNotes: data.reviewNotes },
+      },
+    });
+
+    return customer;
+  }
+
+  async takeOverConversation(customerId: string, adminId: string) {
+    return this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        isAdminTakeover: true,
+        takeoverAdminId: adminId,
+        conversationState: 'ESCALATED',
+      },
+    });
+  }
+
+  async releaseTakeover(customerId: string) {
+    return this.prisma.customer.update({
+      where: { id: customerId },
+      data: {
+        isAdminTakeover: false,
+        takeoverAdminId: null,
+        conversationState: 'IDLE',
+      },
+    });
   }
 
   async getConversations(customerId: string, limit = 50) {
@@ -81,9 +251,37 @@ export class CustomersService {
     metadata?: any;
     processedByAI?: boolean;
     aiResponseId?: string;
+    isAdminTakeover?: boolean;
+    adminId?: string;
   }) {
     return this.prisma.messengerConversation.create({
       data: { customerId, ...data },
+    });
+  }
+
+  async getConversationContext(customerId: string) {
+    return this.prisma.conversationContext.findUnique({
+      where: { customerId },
+    });
+  }
+
+  async updateConversationContext(customerId: string, data: {
+    sessionStep?: string;
+    collectedData?: any;
+    recentMessages?: any;
+    lastActiveAt?: Date;
+  }) {
+    return this.prisma.conversationContext.upsert({
+      where: { customerId },
+      update: {
+        ...data,
+        lastActiveAt: data.lastActiveAt || new Date(),
+      },
+      create: {
+        customerId,
+        ...data,
+        lastActiveAt: data.lastActiveAt || new Date(),
+      },
     });
   }
 
@@ -98,6 +296,7 @@ export class CustomersService {
           },
         },
         conversations: true,
+        conversationContext: true,
       },
     });
     if (!customer) throw new NotFoundException('Customer not found');
@@ -107,6 +306,7 @@ export class CustomersService {
   async deleteData(customerId: string) {
     await this.prisma.$transaction([
       this.prisma.messengerConversation.deleteMany({ where: { customerId } }),
+      this.prisma.conversationContext.delete({ where: { customerId } }),
       this.prisma.customer.update({ where: { id: customerId }, data: { isActive: false } }),
     ]);
   }

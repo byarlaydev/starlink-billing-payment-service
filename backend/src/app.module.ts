@@ -15,6 +15,7 @@ import { QueueModule } from './modules/queue/queue.module';
 import { HealthModule } from './modules/health/health.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AIModule } from './ai/ai.module';
+import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 
 @Module({
   imports: [
@@ -39,6 +40,7 @@ import { AIModule } from './ai/ai.module';
     QueueModule,
     HealthModule,
     AdminModule,
+    KnowledgeBaseModule,
   ],
   providers: [
     {

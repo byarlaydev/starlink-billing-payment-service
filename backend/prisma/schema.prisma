@@ -80,31 +80,97 @@ enum Language {
   MY
 }
 
+enum DataReviewStatus {
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+}
+
+enum KnowledgeCategory {
+  FAQ
+  BILLING
+  PAYMENT
+  POLICY
+  GENERAL
+  STARLINK_INFO
+}
+
 // ============================================
 // CUSTOMERS
 // ============================================
 
 model Customer {
-  id               String   @id @default(uuid())
-  messengerPsid    String   @unique
+  id               String             @id @default(uuid())
+  messengerPsid    String             @unique
   fullName         String?
   facebookName     String?
   contactNumber    String?
   emailAddress     String?
   starlinkEmail    String?
   starlinkAccount  String?
-  preferredLang    Language @default(EN)
+  preferredLang    Language           @default(EN)
   conversationState ConversationState @default(IDLE)
-  isActive         Boolean  @default(true)
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  isActive         Boolean            @default(true)
+  dataCollectedBy  String             @default("bot")
+  reviewStatus     DataReviewStatus   @default(PENDING_REVIEW)
+  reviewedBy       String?
+  reviewedAt       DateTime?
+  reviewNotes      String?            @db.Text
+  isAdminTakeover  Boolean            @default(false)
+  takeoverAdminId  String?
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
 
   billingRequests  BillingRequest[]
   conversations    MessengerConversation[]
+  conversationContext ConversationContext?
 
   @@index([messengerPsid])
   @@index([emailAddress])
+  @@index([reviewStatus])
   @@map("customers")
+}
+
+// ============================================
+// CONVERSATION CONTEXT (Persistent Memory)
+// ============================================
+
+model ConversationContext {
+  id            String   @id @default(uuid())
+  customerId    String   @unique
+  customer      Customer @relation(fields: [customerId], references: [id])
+  sessionStep   String   @default("greeting")
+  collectedData Json     @default("{}")
+  recentMessages Json    @default("[]")
+  lastActiveAt  DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("conversation_contexts")
+}
+
+// ============================================
+// KNOWLEDGE BASE
+// ============================================
+
+model KnowledgeBase {
+  id          String            @id @default(uuid())
+  title       String
+  content     String            @db.Text
+  category    KnowledgeCategory @default(GENERAL)
+  keywords    String[]
+  language    Language          @default(EN)
+  isActive    Boolean           @default(true)
+  priority    Int               @default(0)
+  createdBy   String?
+  updatedBy   String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+
+  @@index([category])
+  @@index([isActive])
+  @@index([language])
+  @@map("knowledge_base")
 }
 
 // ============================================
@@ -112,17 +178,19 @@ model Customer {
 // ============================================
 
 model MessengerConversation {
-  id            String   @id @default(uuid())
-  customerId    String
-  customer      Customer @relation(fields: [customerId], references: [id])
-  direction     String   // "inbound" or "outbound"
-  messageType   String   // "text", "image", "file", "quick_reply", "postback"
-  content       String   @db.Text
-  attachmentUrl String?
-  metadata      Json?
-  processedByAI Boolean  @default(false)
-  aiResponseId  String?
-  createdAt     DateTime @default(now())
+  id              String   @id @default(uuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id])
+  direction       String   // "inbound" or "outbound"
+  messageType     String   // "text", "image", "file", "quick_reply", "postback"
+  content         String   @db.Text
+  attachmentUrl   String?
+  metadata        Json?
+  processedByAI   Boolean  @default(false)
+  aiResponseId    String?
+  isAdminTakeover Boolean  @default(false)
+  adminId         String?
+  createdAt       DateTime @default(now())
 
   @@index([customerId])
   @@index([createdAt])

@@ -65,11 +65,18 @@ export class AIService {
     };
   }
 
+  private sanitizeForGemini(text: string): string {
+    return text.replace(/[\u2022\u2023\u25E6]/g, '-')
+               .replace(/[\u2018\u2019]/g, "'")
+               .replace(/[\u201C\u201D]/g, '"')
+               .replace(/[\u2013\u2014]/g, '-');
+  }
+
   async getEffectiveSystemPrompt(): Promise<string> {
     try {
       const customPrompt = await this.settingsService.get('ai', 'system_prompt');
       if (customPrompt) {
-        return customPrompt + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
+        return this.sanitizeForGemini(customPrompt) + '\n\n' + FAQ_PROMPT + '\n\n' + HUMAN_RESPONSE_GUIDELINES;
       }
     } catch (err) {
       this.logger.warn('Failed to load system prompt from DB settings', err);
@@ -95,15 +102,20 @@ export class AIService {
     if (knowledgeQuery) {
       const knowledgeContext = await this.buildKnowledgeContext(knowledgeQuery, language);
       if (knowledgeContext && messages.length > 0 && messages[0].role === 'system') {
-        messages[0].content += knowledgeContext;
+        messages[0].content += this.sanitizeForGemini(knowledgeContext);
       }
     }
     
+    const sanitized = messages.map(m => ({
+      ...m,
+      content: this.sanitizeForGemini(m.content),
+    }));
+
     const config = await this.getEffectiveConfig();
     if (config.apiKey) {
       this.geminiProvider.setApiKey(config.apiKey);
     }
-    return this.currentProvider.chat(messages, config);
+    return this.currentProvider.chat(sanitized, config);
   }
 
   async extractPaymentProof(imageBuffer: Buffer, mimeType: string): Promise<OCRResult> {
@@ -115,7 +127,7 @@ export class AIService {
     if (config.apiKey) {
       this.geminiProvider.setApiKey(config.apiKey);
     }
-    return this.currentProvider.detectIntent(message, context);
+    return this.currentProvider.detectIntent(this.sanitizeForGemini(message), context);
   }
 
   async analyzeDocument(

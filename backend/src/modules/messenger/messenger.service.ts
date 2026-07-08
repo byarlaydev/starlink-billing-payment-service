@@ -26,6 +26,7 @@ interface CollectedData {
   emailAddress?: string;
   starlinkEmail?: string;
   starlinkAccount?: string;
+  starlinkAccountId?: string;
   billingAmount?: number;
   billingMonth?: string;
   preferredPayment?: string;
@@ -37,6 +38,7 @@ interface CustomerContext {
   conversationHistory: any[];
   billingHistory: any[];
   conversationContext: any;
+  starlinkAccounts: any[];
   lastInteraction: string;
   totalInteractions: number;
 }
@@ -59,10 +61,14 @@ export class MessengerService {
   private async loadFullCustomerContext(customerId: string, psid: string): Promise<CustomerContext> {
     const customer = await this.customersService.findOrCreate(psid);
     
-    const [conversationHistory, billingHistory, conversationContext] = await Promise.all([
+    const [conversationHistory, billingHistory, conversationContext, starlinkAccounts] = await Promise.all([
       this.customersService.getConversations(customer.id, 20),
       this.billingService.findByCustomer(customer.id, 1, 10),
       this.customersService.getConversationContext(customer.id),
+      this.prisma.starlinkAccount.findMany({
+        where: { customerId: customer.id },
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+      }),
     ]);
 
     const sortedHistory = conversationHistory.reverse();
@@ -75,23 +81,37 @@ export class MessengerService {
       conversationHistory: sortedHistory,
       billingHistory: billingHistory.data,
       conversationContext,
+      starlinkAccounts,
       lastInteraction,
       totalInteractions: sortedHistory.length,
     };
   }
 
   private buildCustomerProfile(context: CustomerContext): string {
-    const { customer, billingHistory, conversationHistory, totalInteractions } = context;
+    const { customer, billingHistory, conversationHistory, starlinkAccounts, totalInteractions } = context;
     
     let profile = `\n\n=== CUSTOMER PROFILE ===\n`;
     profile += `Name: ${customer.fullName || customer.facebookName || 'Not provided'}\n`;
     profile += `Facebook Name: ${customer.facebookName || 'N/A'}\n`;
     profile += `Contact: ${customer.contactNumber || 'N/A'}\n`;
     profile += `Email: ${customer.emailAddress || 'N/A'}\n`;
-    profile += `Starlink Email: ${customer.starlinkEmail || 'N/A'}\n`;
-    profile += `Starlink Account: ${customer.starlinkAccount || 'N/A'}\n`;
     profile += `Preferred Language: ${customer.preferredLang}\n`;
     profile += `Total Interactions: ${totalInteractions}\n`;
+
+    if (starlinkAccounts.length > 0) {
+      profile += `\n=== STARLINK ACCOUNTS (${starlinkAccounts.length}) ===\n`;
+      starlinkAccounts.forEach((account, i) => {
+        const primaryTag = account.isPrimary ? ' [PRIMARY]' : '';
+        const nickname = account.nickname ? ` (${account.nickname})` : '';
+        profile += `${i + 1}. ${account.email}${nickname}${primaryTag}\n`;
+        if (account.accountNumber) {
+          profile += `   Account #: ${account.accountNumber}\n`;
+        }
+      });
+    } else {
+      profile += `\n=== STARLINK ACCOUNTS ===\n`;
+      profile += `No Starlink accounts registered yet\n`;
+    }
     
     if (billingHistory.length > 0) {
       profile += `\n=== BILLING HISTORY ===\n`;
@@ -255,6 +275,12 @@ export class MessengerService {
     const sessionStep = context?.sessionStep || 'collect_full_name';
     const collected: CollectedData = (context?.collectedData as CollectedData) || {};
 
+    // Handle account selection step
+    if (sessionStep === 'select_starlink_account') {
+      await this.processStarlinkAccountSelection(customer, text, fullContext);
+      return;
+    }
+
     const steps = [
       'collect_full_name',
       'collect_contact',
@@ -311,6 +337,20 @@ export class MessengerService {
     }
 
     const nextStep = currentIndex + 1 < steps.length ? steps[currentIndex + 1] : 'confirm_info';
+
+    // Check if we need to handle Starlink account selection
+    if (sessionStep === 'collect_email' && !collected.starlinkAccountId) {
+      // After collecting email, check for existing Starlink accounts
+      await this.customersService.updateConversationContext(customer.id, {
+        sessionStep: nextStep,
+        collectedData: collected,
+      });
+      
+      // Refresh context to get latest accounts
+      const updatedContext = await this.loadFullCustomerContext(customer.id, customer.messengerPsid);
+      await this.handleStarlinkAccountSelection(customer, updatedContext);
+      return;
+    }
 
     await this.customersService.updateConversationContext(customer.id, {
       sessionStep: nextStep,
@@ -480,6 +520,94 @@ What can I help you with today?`;
     });
 
     await this.sendTextMessage(customer.messengerPsid, message);
+  }
+
+  private async handleStarlinkAccountSelection(customer: any, context: CustomerContext) {
+    const accounts = context.starlinkAccounts || [];
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
+
+    if (accounts.length === 0) {
+      // No accounts, proceed to collect new account
+      const contextData = await this.customersService.getConversationContext(customer.id);
+      const collected: CollectedData = (contextData?.collectedData as any) || {};
+      await this.customersService.updateConversationContext(customer.id, {
+        sessionStep: 'collect_starlink_email',
+        collectedData: collected,
+      });
+      await this.sendTextMessage(customer.messengerPsid, 
+        `${firstName ? `No worries, ${firstName}!` : 'No worries!'} What email did you use for your Starlink account?`);
+      return;
+    }
+
+    if (accounts.length === 1) {
+      // Only one account, use it automatically
+      const account = accounts[0];
+      const contextData = await this.customersService.getConversationContext(customer.id);
+      const collected: CollectedData = (contextData?.collectedData as any) || {};
+      collected.starlinkEmail = account.email;
+      collected.starlinkAccount = account.accountNumber;
+      collected.starlinkAccountId = account.id;
+      
+      await this.customersService.updateConversationContext(customer.id, {
+        sessionStep: 'collect_billing_amount',
+        collectedData: collected,
+      });
+      
+      await this.sendTextMessage(customer.messengerPsid,
+        `${firstName ? `Great, ${firstName}!` : 'Great!'} I found your Starlink account (${account.email}). What's the billing amount you're looking to pay?`);
+      return;
+    }
+
+    // Multiple accounts - ask which one to use
+    let accountList = `${firstName ? `${firstName}, ` : ''}I see you have multiple Starlink accounts. Which one would you like to use for this billing?\n\n`;
+    accounts.forEach((account, index) => {
+      const primaryTag = account.isPrimary ? ' ⭐' : '';
+      const nickname = account.nickname ? ` (${account.nickname})` : '';
+      accountList += `${index + 1}. ${account.email}${nickname}${primaryTag}\n`;
+      if (account.accountNumber) {
+        accountList += `   Account #: ${account.accountNumber}\n`;
+      }
+    });
+    accountList += `\nJust reply with the number (1-${accounts.length}) of the account you want to use.`;
+
+    const contextData = await this.customersService.getConversationContext(customer.id);
+    await this.customersService.updateConversationContext(customer.id, {
+      sessionStep: 'select_starlink_account',
+      collectedData: (contextData?.collectedData as any) || {},
+    });
+
+    await this.sendTextMessage(customer.messengerPsid, accountList);
+  }
+
+  private async processStarlinkAccountSelection(customer: any, text: string, context: CustomerContext) {
+    const accounts = context.starlinkAccounts || [];
+    const selection = parseInt(text.trim());
+    const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
+
+    if (isNaN(selection) || selection < 1 || selection > accounts.length) {
+      await this.sendTextMessage(customer.messengerPsid,
+        `Hmm, that's not quite right. Please reply with a number between 1 and ${accounts.length}.`);
+      return;
+    }
+
+    const selectedAccount = accounts[selection - 1];
+    const contextData = await this.customersService.getConversationContext(customer.id);
+    const collected: CollectedData = (contextData?.collectedData as any) || {};
+    collected.starlinkEmail = selectedAccount.email;
+    collected.starlinkAccount = selectedAccount.accountNumber;
+    collected.starlinkAccountId = selectedAccount.id;
+
+    await this.customersService.updateConversationContext(customer.id, {
+      sessionStep: 'collect_billing_amount',
+      collectedData: collected,
+    });
+
+    const accountDisplay = selectedAccount.nickname 
+      ? `${selectedAccount.email} (${selectedAccount.nickname})`
+      : selectedAccount.email;
+
+    await this.sendTextMessage(customer.messengerPsid,
+      `${firstName ? `Perfect, ${firstName}!` : 'Perfect!'} Using ${accountDisplay}. What's the billing amount you're looking to pay?`);
   }
 
   private async checkStatus(customer: any, context?: CustomerContext) {

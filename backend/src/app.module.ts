@@ -16,6 +16,7 @@ import { HealthModule } from './modules/health/health.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AIModule } from './ai/ai.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
+import { StarlinkAccountsModule } from './modules/starlink-accounts/starlink-accounts.module';
 
 @Module({
   imports: [
@@ -41,6 +42,7 @@ import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.mod
     HealthModule,
     AdminModule,
     KnowledgeBaseModule,
+    StarlinkAccountsModule,
   ],
   providers: [
     {

@@ -124,11 +124,34 @@ model Customer {
   billingRequests  BillingRequest[]
   conversations    MessengerConversation[]
   conversationContext ConversationContext?
+  starlinkAccounts StarlinkAccount[]
 
   @@index([messengerPsid])
   @@index([emailAddress])
   @@index([reviewStatus])
   @@map("customers")
+}
+
+// ============================================
+// STARLINK ACCOUNTS
+// ============================================
+
+model StarlinkAccount {
+  id              String   @id @default(uuid())
+  customerId      String
+  customer        Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  email           String
+  accountNumber   String?
+  nickname        String?
+  isPrimary       Boolean  @default(false)
+  isActive        Boolean  @default(true)
+  notes           String?  @db.Text
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([customerId])
+  @@index([email])
+  @@map("starlink_accounts")
 }
 
 // ============================================

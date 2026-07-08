@@ -1,0 +1,224 @@
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { PrismaService } from '../../config/prisma.service';
+import { StarlinkAccount } from '@prisma/client';
+
+@Injectable()
+export class StarlinkAccountsService {
+  private readonly logger = new Logger(StarlinkAccountsService.name);
+
+  constructor(private readonly prisma: PrismaService) {}
+
+  async create(data: {
+    customerId: string;
+    email: string;
+    accountNumber?: string;
+    nickname?: string;
+    isPrimary?: boolean;
+    notes?: string;
+  }): Promise<StarlinkAccount> {
+    // If this is the first account or marked as primary, update other accounts
+    if (data.isPrimary) {
+      await this.prisma.starlinkAccount.updateMany({
+        where: { customerId: data.customerId },
+        data: { isPrimary: false },
+      });
+    }
+
+    // Check if this is the first account for this customer
+    const existingCount = await this.prisma.starlinkAccount.count({
+      where: { customerId: data.customerId },
+    });
+
+    const account = await this.prisma.starlinkAccount.create({
+      data: {
+        customerId: data.customerId,
+        email: data.email,
+        accountNumber: data.accountNumber,
+        nickname: data.nickname,
+        isPrimary: data.isPrimary ?? existingCount === 0,
+        notes: data.notes,
+      },
+    });
+
+    // Update customer's primary starlink email/account fields
+    if (account.isPrimary) {
+      await this.prisma.customer.update({
+        where: { id: data.customerId },
+        data: {
+          starlinkEmail: account.email,
+          starlinkAccount: account.accountNumber,
+        },
+      });
+    }
+
+    this.logger.log(`Created Starlink account ${account.id} for customer ${data.customerId}`);
+    return account;
+  }
+
+  async findAll(filter?: {
+    customerId?: string;
+    isActive?: boolean;
+    page?: number;
+    limit?: number;
+  }) {
+    const where: any = {};
+    if (filter?.customerId) where.customerId = filter.customerId;
+    if (filter?.isActive !== undefined) where.isActive = filter.isActive;
+
+    const page = filter?.page || 1;
+    const limit = filter?.limit || 20;
+
+    const [data, total] = await Promise.all([
+      this.prisma.starlinkAccount.findMany({
+        where,
+        skip: (page - 1) * limit,
+        take: limit,
+        orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+        include: {
+          customer: {
+            select: {
+              id: true,
+              fullName: true,
+              facebookName: true,
+              messengerPsid: true,
+            },
+          },
+        },
+      }),
+      this.prisma.starlinkAccount.count({ where }),
+    ]);
+
+    return { data, total, page, limit, totalPages: Math.ceil(total / limit) };
+  }
+
+  async findById(id: string): Promise<StarlinkAccount> {
+    const account = await this.prisma.starlinkAccount.findUnique({
+      where: { id },
+      include: { customer: true },
+    });
+    if (!account) {
+      throw new NotFoundException(`Starlink account ${id} not found`);
+    }
+    return account;
+  }
+
+  async findByCustomerId(customerId: string): Promise<StarlinkAccount[]> {
+    return this.prisma.starlinkAccount.findMany({
+      where: { customerId },
+      orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }],
+    });
+  }
+
+  async update(
+    id: string,
+    data: {
+      email?: string;
+      accountNumber?: string;
+      nickname?: string;
+      isPrimary?: boolean;
+      isActive?: boolean;
+      notes?: string;
+    },
+  ): Promise<StarlinkAccount> {
+    const account = await this.findById(id);
+
+    // If setting as primary, unset other primary accounts
+    if (data.isPrimary) {
+      await this.prisma.starlinkAccount.updateMany({
+        where: { customerId: account.customerId, id: { not: id } },
+        data: { isPrimary: false },
+      });
+
+      // Update customer's primary fields
+      await this.prisma.customer.update({
+        where: { id: account.customerId },
+        data: {
+          starlinkEmail: data.email || account.email,
+          starlinkAccount: data.accountNumber || account.accountNumber,
+        },
+      });
+    }
+
+    const updated = await this.prisma.starlinkAccount.update({
+      where: { id },
+      data,
+    });
+
+    this.logger.log(`Updated Starlink account ${id}`);
+    return updated;
+  }
+
+  async delete(id: string): Promise<void> {
+    const account = await this.findById(id);
+
+    await this.prisma.starlinkAccount.delete({ where: { id } });
+
+    // If deleted account was primary, set another as primary
+    if (account.isPrimary) {
+      const nextPrimary = await this.prisma.starlinkAccount.findFirst({
+        where: { customerId: account.customerId },
+        orderBy: { createdAt: 'desc' },
+      });
+
+      if (nextPrimary) {
+        await this.prisma.starlinkAccount.update({
+          where: { id: nextPrimary.id },
+          data: { isPrimary: true },
+        });
+
+        await this.prisma.customer.update({
+          where: { id: account.customerId },
+          data: {
+            starlinkEmail: nextPrimary.email,
+            starlinkAccount: nextPrimary.accountNumber,
+          },
+        });
+      } else {
+        // No more accounts, clear customer fields
+        await this.prisma.customer.update({
+          where: { id: account.customerId },
+          data: {
+            starlinkEmail: null,
+            starlinkAccount: null,
+          },
+        });
+      }
+    }
+
+    this.logger.log(`Deleted Starlink account ${id}`);
+  }
+
+  async setPrimary(id: string): Promise<StarlinkAccount> {
+    const account = await this.findById(id);
+
+    await this.prisma.starlinkAccount.updateMany({
+      where: { customerId: account.customerId },
+      data: { isPrimary: false },
+    });
+
+    const updated = await this.prisma.starlinkAccount.update({
+      where: { id },
+      data: { isPrimary: true },
+    });
+
+    await this.prisma.customer.update({
+      where: { id: account.customerId },
+      data: {
+        starlinkEmail: account.email,
+        starlinkAccount: account.accountNumber,
+      },
+    });
+
+    return updated;
+  }
+
+  async getStats() {
+    const [total, active, primary] = await Promise.all([
+      this.prisma.starlinkAccount.count(),
+      this.prisma.starlinkAccount.count({ where: { isActive: true } }),
+      this.prisma.starlinkAccount.count({ where: { isPrimary: true } }),
+    ]);
+
+    return { total, active, primary };
+  }
+}

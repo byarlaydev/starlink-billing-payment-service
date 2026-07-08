@@ -12,11 +12,13 @@ import {
   ShieldCheck,
   BookOpen,
   MessageSquare,
+  Satellite,
 } from 'lucide-react';
 
 const navItems = [
   { href: '/dashboard/requests', label: 'Billing Requests', icon: FileText },
   { href: '/dashboard/customers', label: 'Customers', icon: Users },
+  { href: '/dashboard/starlink-accounts', label: 'Starlink Accounts', icon: Satellite },
   { href: '/dashboard/manual-review', label: 'Manual Review', icon: AlertTriangle },
   { href: '/dashboard/knowledge-base', label: 'Knowledge Base', icon: BookOpen },
   { href: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },

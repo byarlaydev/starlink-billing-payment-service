@@ -56,6 +56,7 @@ export class CustomersService {
       include: {
         billingRequests: { orderBy: { createdAt: 'desc' }, take: 10 },
         conversationContext: true,
+        starlinkAccounts: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }] },
       },
     });
     if (!customer) throw new NotFoundException('Customer not found');
@@ -297,6 +298,7 @@ export class CustomersService {
         },
         conversations: true,
         conversationContext: true,
+        starlinkAccounts: { orderBy: [{ isPrimary: 'desc' }, { createdAt: 'desc' }] },
       },
     });
     if (!customer) throw new NotFoundException('Customer not found');

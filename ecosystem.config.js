@@ -2,8 +2,8 @@ module.exports = {
   apps: [
     {
       name: 'backend',
-      script: './dist/src/main.js',
-      cwd: '/app/backend',
+      script: './backend/dist/main.js',
+      cwd: '/app',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -15,8 +15,8 @@ module.exports = {
     },
     {
       name: 'frontend',
-      script: './server.js',
-      cwd: '/app/frontend/standalone',
+      script: './frontend/server.js',
+      cwd: '/app',
       instances: 1,
       autorestart: true,
       watch: false,
@@ -24,7 +24,6 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: 3000,
-        HOSTNAME: '0.0.0.0',
       },
     },
   ],

@@ -24,8 +24,8 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine
 
-# Install OpenSSL for Prisma
-RUN apk add --no-cache openssl
+# Install OpenSSL for Prisma and Nginx for reverse proxy
+RUN apk add --no-cache openssl nginx
 
 WORKDIR /app
 
@@ -34,21 +34,24 @@ COPY backend/package.json backend/package-lock.json ./backend/
 RUN cd backend && npm ci --omit=dev
 
 # Copy backend build
-COPY --from=backend-builder /app/dist ./backend/dist
-COPY --from=backend-builder /app/node_modules/.prisma ./backend/node_modules/.prisma
-COPY --from=backend-builder /app/node_modules/@prisma ./backend/node_modules/@prisma
+COPY --from=backend-builder /app/backend/dist ./backend/dist
+COPY --from=backend-builder /app/backend/node_modules/.prisma ./backend/node_modules/.prisma
+COPY --from=backend-builder /app/backend/node_modules/@prisma ./backend/node_modules/@prisma
 COPY backend/prisma ./backend/prisma
 
 # Copy frontend build
-COPY --from=frontend-builder /app/.next/standalone ./frontend/standalone
-COPY --from=frontend-builder /app/.next/static ./frontend/standalone/.next/static
-COPY --from=frontend-builder /app/public ./frontend/standalone/public
+COPY --from=frontend-builder /app/frontend/.next/standalone ./frontend
+COPY --from=frontend-builder /app/frontend/.next/static ./frontend/.next/static
+COPY --from=frontend-builder /app/frontend/public ./frontend/public
 
 # Install PM2 for process management
 RUN npm install -g pm2
 
 # Create uploads directory
 RUN mkdir -p backend/uploads
+
+# Copy nginx config
+COPY nginx/nginx.conf /etc/nginx/nginx.conf
 
 # Copy ecosystem config
 COPY ecosystem.config.js ./
@@ -57,6 +60,6 @@ COPY ecosystem.config.js ./
 COPY start.sh ./
 RUN chmod +x start.sh
 
-EXPOSE 3000 3001
+EXPOSE 80
 
 CMD ["./start.sh"]

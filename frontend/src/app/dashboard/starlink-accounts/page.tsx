@@ -6,6 +6,7 @@ import { formatDate, cn } from '@/lib/utils';
 import { Search, Plus, Edit, Trash2, Star, Satellite } from 'lucide-react';
 import { StatusDialog } from '@/components/ui/status-dialog';
 import { getErrorMessage } from '@/lib/error-utils';
+import { Select } from '@/components/ui/select';
 
 interface RegionPlan {
   id: string;
@@ -361,20 +362,21 @@ function AccountModal({
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Customer *</label>
-            <select
+            <Select
               value={formData.customerId}
-              onChange={(e) => setFormData({ ...formData, customerId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              required
+              onChange={(value) => setFormData({ ...formData, customerId: value })}
+              options={[
+                { value: '', label: 'Select a customer' },
+                ...customers.map((c) => ({
+                  value: c.id,
+                  label: c.fullName || c.facebookName || c.messengerPsid,
+                })),
+              ]}
+              placeholder="Select a customer"
+              searchable={customers.length > 5}
               disabled={!!account}
-            >
-              <option value="">Select a customer</option>
-              {customers.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.fullName || c.facebookName || c.messengerPsid}
-                </option>
-              ))}
-            </select>
+              required
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Account Name *</label>
@@ -420,18 +422,19 @@ function AccountModal({
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Region & Plan</label>
-            <select
+            <Select
               value={formData.regionPlanId}
-              onChange={(e) => setFormData({ ...formData, regionPlanId: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="">Select region and plan</option>
-              {regionPlans.map((rp) => (
-                <option key={rp.id} value={rp.id}>
-                  {rp.region} - {rp.plan} {rp.price ? `($${rp.price})` : ''}
-                </option>
-              ))}
-            </select>
+              onChange={(value) => setFormData({ ...formData, regionPlanId: value })}
+              options={[
+                { value: '', label: 'Select region and plan' },
+                ...regionPlans.map((rp) => ({
+                  value: rp.id,
+                  label: `${rp.region} - ${rp.plan}${rp.price ? ` ($${rp.price})` : ''}`,
+                })),
+              ]}
+              placeholder="Select region and plan"
+              searchable={regionPlans.length > 5}
+            />
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Service Address</label>

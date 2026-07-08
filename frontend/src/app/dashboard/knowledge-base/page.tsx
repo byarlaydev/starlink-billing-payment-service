@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
 import { Search, Plus, Edit, Trash2, BookOpen } from 'lucide-react';
 import { toast } from 'sonner';
+import { Select } from '@/components/ui/select';
 
 interface KnowledgeEntry {
   id: string;
@@ -101,22 +102,24 @@ export default function KnowledgeBasePage() {
 
       <div className="flex gap-4">
         <div className="flex gap-2 flex-wrap">
-          <select
+          <Select
             value={categoryFilter}
-            onChange={(e) => { setCategoryFilter(e.target.value); setPage(1); }}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="ALL">All Categories</option>
-            {categories.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-          <select
+            onChange={(value) => { setCategoryFilter(value); setPage(1); }}
+            options={[
+              { value: 'ALL', label: 'All Categories' },
+              ...categories.map((c) => ({ value: c, label: c.replace('_', ' ') })),
+            ]}
+            className="w-44"
+          />
+          <Select
             value={languageFilter}
-            onChange={(e) => { setLanguageFilter(e.target.value); setPage(1); }}
-            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm"
-          >
-            <option value="ALL">All Languages</option>
-            {languages.map(l => <option key={l} value={l}>{l}</option>)}
-          </select>
+            onChange={(value) => { setLanguageFilter(value); setPage(1); }}
+            options={[
+              { value: 'ALL', label: 'All Languages' },
+              ...languages.map((l) => ({ value: l, label: l === 'EN' ? 'English' : 'Myanmar' })),
+            ]}
+            className="w-36"
+          />
         </div>
       </div>
 
@@ -293,23 +296,19 @@ function KnowledgeEntryModal({ entry, onClose, onRefresh }: { entry: KnowledgeEn
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-              <select
+              <Select
                 value={formData.category}
-                onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              >
-                {categories.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
+                onChange={(value) => setFormData({ ...formData, category: value })}
+                options={categories.map((c) => ({ value: c, label: c.replace('_', ' ') }))}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Language</label>
-              <select
+              <Select
                 value={formData.language}
-                onChange={(e) => setFormData({ ...formData, language: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-              >
-                {languages.map(l => <option key={l} value={l}>{l}</option>)}
-              </select>
+                onChange={(value) => setFormData({ ...formData, language: value })}
+                options={languages.map((l) => ({ value: l, label: l === 'EN' ? 'English' : 'Myanmar' }))}
+              />
             </div>
           </div>
           <div>

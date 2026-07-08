@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { Save, Key, MessageSquare, Bot, HardDrive, Globe } from 'lucide-react';
+import { Select } from '@/components/ui/select';
 
 interface SettingGroup {
   category: string;
@@ -158,14 +159,21 @@ export default function SettingsPage() {
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                   />
                 ) : field.type === 'select' ? (
-                  <select
+                  <Select
                     value={editValues[`${activeTab}:${field.key}`] || ''}
-                    onChange={(e) => setEditValues({ ...editValues, [`${activeTab}:${field.key}`]: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  >
-                    <option value="true">Enabled</option>
-                    <option value="false">Disabled</option>
-                  </select>
+                    onChange={(value) => setEditValues({ ...editValues, [`${activeTab}:${field.key}`]: value })}
+                    options={
+                      field.key === 'language'
+                        ? [
+                            { value: 'EN', label: 'English' },
+                            { value: 'MY', label: 'Myanmar' },
+                          ]
+                        : [
+                            { value: 'true', label: 'Enabled' },
+                            { value: 'false', label: 'Disabled' },
+                          ]
+                    }
+                  />
                 ) : (
                   <input
                     type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}

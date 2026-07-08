@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
 import { Search, CheckCircle, XCircle, MessageSquare, UserPlus, Satellite, Star, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+import { Select } from '@/components/ui/select';
 
 interface RegionPlan {
   id: string;
@@ -539,18 +540,19 @@ function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Custo
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Region & Plan</label>
-                  <select
-                    value={newAccount.regionPlanId}
-                    onChange={(e) => setNewAccount({ ...newAccount, regionPlanId: e.target.value })}
-                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-                  >
-                    <option value="">Select region and plan</option>
-                    {regionPlans.map((rp) => (
-                      <option key={rp.id} value={rp.id}>
-                        {rp.region} - {rp.plan} {rp.price ? `($${rp.price})` : ''}
-                      </option>
-                    ))}
-                  </select>
+                <Select
+                  value={newAccount.regionPlanId}
+                  onChange={(value) => setNewAccount({ ...newAccount, regionPlanId: value })}
+                  options={[
+                    { value: '', label: 'Select region and plan' },
+                    ...regionPlans.map((rp) => ({
+                      value: rp.id,
+                      label: `${rp.region} - ${rp.plan}${rp.price ? ` ($${rp.price})` : ''}`,
+                    })),
+                  ]}
+                  placeholder="Select region and plan"
+                  searchable={regionPlans.length > 5}
+                />
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">Service Address</label>

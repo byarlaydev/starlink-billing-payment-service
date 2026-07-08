@@ -15,7 +15,6 @@ export class RegionPlanService {
     description?: string;
     price?: number;
     currency?: string;
-    dueDate?: number;
   }): Promise<StarlinkRegionAndPlan> {
     try {
       const regionPlan = await this.prisma.starlinkRegionAndPlan.create({
@@ -25,7 +24,6 @@ export class RegionPlanService {
           description: data.description,
           price: data.price,
           currency: data.currency || 'USD',
-          dueDate: data.dueDate,
         },
       });
 
@@ -81,7 +79,6 @@ export class RegionPlanService {
       description?: string;
       price?: number;
       currency?: string;
-      dueDate?: number | null;
       isActive?: boolean;
     },
   ): Promise<StarlinkRegionAndPlan> {

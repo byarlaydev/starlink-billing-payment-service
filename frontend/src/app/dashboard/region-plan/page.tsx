@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
-import { Search, Plus, Edit, Trash2, Globe, DollarSign, Calendar } from 'lucide-react';
+import { Search, Plus, Edit, Trash2, Globe, DollarSign } from 'lucide-react';
 import { CurrencyDropdown } from '@/components/ui/currency-dropdown';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
@@ -46,7 +46,6 @@ interface RegionPlan {
   description: string | null;
   price: number | null;
   currency: string;
-  dueDate: number | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -162,12 +161,6 @@ export default function RegionPlanPage() {
                         {rp.price} {getCurrencyName(rp.currency)}/month
                       </span>
                     )}
-                    {rp.dueDate && (
-                      <span className="flex items-center gap-1 text-sm text-gray-600">
-                        <Calendar className="w-4 h-4" />
-                        Due day {rp.dueDate}
-                      </span>
-                    )}
                   </div>
                   {rp.description && (
                     <p className="text-sm text-gray-600">{rp.description}</p>
@@ -259,7 +252,6 @@ function RegionPlanModal({
     description: regionPlan?.description || '',
     price: regionPlan?.price || '',
     currency: regionPlan?.currency || 'USD',
-    dueDate: regionPlan?.dueDate || '',
     isActive: regionPlan?.isActive ?? true,
   });
   const [submitting, setSubmitting] = useState(false);
@@ -271,7 +263,6 @@ function RegionPlanModal({
       const submitData: Record<string, any> = {
         ...formData,
         price: formData.price ? parseFloat(formData.price as string) : undefined,
-        dueDate: formData.dueDate ? parseInt(formData.dueDate as string, 10) : undefined,
       };
       if (regionPlan) {
         await api.put(`/region-plan/${regionPlan.id}`, submitData);
@@ -350,19 +341,6 @@ function RegionPlanModal({
                 onChange={(value) => setFormData({ ...formData, currency: value })}
               />
             </div>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
-            <select
-              value={formData.dueDate}
-              onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            >
-              <option value="">No due date</option>
-              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
-                <option key={day} value={day}>Day {day} of month</option>
-              ))}
-            </select>
           </div>
           <div className="flex items-center">
             <label className="flex items-center gap-2">

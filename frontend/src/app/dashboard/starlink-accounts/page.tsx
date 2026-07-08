@@ -26,6 +26,7 @@ interface StarlinkAccount {
   password: string | null;
   regionPlanId: string | null;
   serviceAddress: string | null;
+  dueDate: number | null;
   notes: string | null;
   createdAt: string;
   updatedAt: string;
@@ -70,16 +71,6 @@ export default function StarlinkAccountsPage() {
     try {
       await api.delete(`/starlink-accounts/${id}`);
       toast.success('Starlink account has been deleted.');
-      fetchAccounts();
-    } catch (err) {
-      toast.error(getErrorMessage(err));
-    }
-  };
-
-  const handleSetPrimary = async (id: string) => {
-    try {
-      await api.put(`/starlink-accounts/${id}/set-primary`);
-      toast.success('Account has been set as primary.');
       fetchAccounts();
     } catch (err) {
       toast.error(getErrorMessage(err));
@@ -257,6 +248,7 @@ function AccountModal({
     password: account?.password || '',
     regionPlanId: account?.regionPlanId || '',
     serviceAddress: account?.serviceAddress || '',
+    dueDate: account?.dueDate || '',
     notes: account?.notes || '',
   });
   const [customers, setCustomers] = useState<any[]>([]);
@@ -286,6 +278,7 @@ function AccountModal({
       const submitData = {
         ...formData,
         regionPlanId: formData.regionPlanId || undefined,
+        dueDate: formData.dueDate ? parseInt(formData.dueDate as string, 10) : undefined,
       };
       if (account) {
         await api.put(`/starlink-accounts/${account.id}`, submitData);
@@ -393,6 +386,19 @@ function AccountModal({
               placeholder="Select region and plan"
               searchable={regionPlans.length > 5}
             />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Due Date</label>
+            <select
+              value={formData.dueDate}
+              onChange={(e) => setFormData({ ...formData, dueDate: e.target.value })}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+            >
+              <option value="">No due date</option>
+              {Array.from({ length: 28 }, (_, i) => i + 1).map((day) => (
+                <option key={day} value={day}>Day {day} of month</option>
+              ))}
+            </select>
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Service Address</label>

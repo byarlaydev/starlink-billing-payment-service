@@ -16,6 +16,7 @@ export class StarlinkAccountsService {
     password?: string;
     regionPlanId?: string;
     serviceAddress?: string;
+    dueDate?: number;
     isPrimary?: boolean;
     notes?: string;
   }): Promise<StarlinkAccount> {
@@ -41,6 +42,7 @@ export class StarlinkAccountsService {
         password: data.password,
         regionPlanId: data.regionPlanId,
         serviceAddress: data.serviceAddress,
+        dueDate: data.dueDate,
         isPrimary: data.isPrimary ?? existingCount === 0,
         notes: data.notes,
       },
@@ -123,6 +125,7 @@ export class StarlinkAccountsService {
       password?: string;
       regionPlanId?: string;
       serviceAddress?: string;
+      dueDate?: number | null;
       isPrimary?: boolean;
       isActive?: boolean;
       notes?: string;

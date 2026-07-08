@@ -1,4 +1,4 @@
-import { IsString, IsEmail, IsOptional, IsBoolean, IsUUID } from 'class-validator';
+import { IsString, IsEmail, IsOptional, IsBoolean, IsUUID, IsInt, Min, Max } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateStarlinkAccountDto {
@@ -38,6 +38,13 @@ export class CreateStarlinkAccountDto {
   @IsBoolean()
   @IsOptional()
   isPrimary?: boolean;
+
+  @ApiPropertyOptional({ description: 'Due date (1-28)', example: 15 })
+  @IsInt()
+  @Min(1)
+  @Max(28)
+  @IsOptional()
+  dueDate?: number;
 
   @ApiPropertyOptional({ description: 'Additional notes' })
   @IsString()

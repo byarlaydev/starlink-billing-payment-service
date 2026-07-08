@@ -3,8 +3,19 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { formatDate, cn } from '@/lib/utils';
-import { Search, Eye, CheckCircle, XCircle, MessageSquare, UserPlus } from 'lucide-react';
+import { Search, CheckCircle, XCircle, MessageSquare, UserPlus, Satellite, Star, ExternalLink } from 'lucide-react';
 import { toast } from 'sonner';
+
+interface StarlinkAccount {
+  id: string;
+  email: string;
+  accountNumber: string | null;
+  nickname: string | null;
+  isPrimary: boolean;
+  isActive: boolean;
+  notes: string | null;
+  createdAt: string;
+}
 
 interface Customer {
   id: string;
@@ -19,7 +30,8 @@ interface Customer {
   reviewStatus: string;
   isAdminTakeover: boolean;
   createdAt: string;
-  _count: { billingRequests: number; conversations: number };
+  _count: { billingRequests: number; conversations: number; starlinkAccounts?: number };
+  starlinkAccounts?: StarlinkAccount[];
 }
 
 const reviewFilters = ['ALL', 'PENDING_REVIEW', 'APPROVED', 'REJECTED'];
@@ -34,6 +46,7 @@ export default function CustomersPage() {
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [showConversation, setShowConversation] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
 
   const fetchCustomers = async () => {
     setLoading(true);
@@ -53,12 +66,11 @@ export default function CustomersPage() {
 
   useEffect(() => { fetchCustomers(); }, [reviewFilter, page, search]);
 
-  const handleReview = async (id: string, status: 'APPROVED' | 'REJECTED', notes?: string) => {
+  const handleReview = async (id: string, status: 'APPROVED' | 'REJECTED') => {
     try {
       await api.put(`/customers/${id}/review`, {
         reviewStatus: status,
         adminId: 'current-admin',
-        reviewNotes: notes,
       });
       toast.success(`Customer ${status === 'APPROVED' ? 'approved' : 'rejected'}`);
       fetchCustomers();
@@ -134,9 +146,9 @@ export default function CustomersPage() {
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Contact</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Starlink</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Starlink Accounts</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Collected By</th>
-              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Review Status</th>
+              <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Review</th>
               <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
               <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
@@ -158,8 +170,24 @@ export default function CustomersPage() {
                     <div className="text-xs text-gray-500">{customer.emailAddress || ''}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <div className="text-sm text-gray-600">{customer.starlinkEmail || 'N/A'}</div>
-                    <div className="text-xs text-gray-500">{customer.starlinkAccount || ''}</div>
+                    <button
+                      onClick={async () => {
+                        try {
+                          const res = await api.get(`/customers/${customer.id}`);
+                          setSelectedCustomer(res.data.data);
+                          setShowDetailModal(true);
+                        } catch {
+                          toast.error('Failed to load customer details');
+                        }
+                      }}
+                      className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-800 hover:underline"
+                    >
+                      <Satellite className="w-3.5 h-3.5" />
+                      {customer._count?.starlinkAccounts ?? 0} account{(customer._count?.starlinkAccounts ?? 0) !== 1 ? 's' : ''}
+                      {customer.starlinkEmail && (
+                        <span className="text-xs text-gray-400 ml-1">({customer.starlinkEmail})</span>
+                      )}
+                    </button>
                   </td>
                   <td className="px-4 py-3">
                     <span className={cn(
@@ -269,12 +297,295 @@ export default function CustomersPage() {
         />
       )}
 
+      {showDetailModal && selectedCustomer && (
+        <CustomerDetailModal
+          customer={selectedCustomer}
+          onClose={() => { setShowDetailModal(false); setSelectedCustomer(null); }}
+          onRefresh={fetchCustomers}
+        />
+      )}
+
       {showAddModal && (
         <AddCustomerModal
           onClose={() => setShowAddModal(false)}
           onRefresh={fetchCustomers}
         />
       )}
+    </div>
+  );
+}
+
+function CustomerDetailModal({ customer, onClose, onRefresh }: { customer: Customer; onClose: () => void; onRefresh: () => void }) {
+  const [accounts, setAccounts] = useState<StarlinkAccount[]>(customer.starlinkAccounts || []);
+  const [loadingAccounts, setLoadingAccounts] = useState(!customer.starlinkAccounts);
+  const [showAddAccount, setShowAddAccount] = useState(false);
+  const [newAccount, setNewAccount] = useState({ email: '', accountNumber: '', nickname: '', notes: '' });
+  const [submitting, setSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (!customer.starlinkAccounts) {
+      const fetchAccounts = async () => {
+        try {
+          const res = await api.get(`/starlink-accounts/customer/${customer.id}`);
+          setAccounts(res.data.data);
+        } catch (err) {
+          console.error(err);
+        } finally {
+          setLoadingAccounts(false);
+        }
+      };
+      fetchAccounts();
+    }
+  }, [customer.id, customer.starlinkAccounts]);
+
+  const handleAddAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      await api.post('/starlink-accounts', {
+        customerId: customer.id,
+        email: newAccount.email,
+        accountNumber: newAccount.accountNumber || undefined,
+        nickname: newAccount.nickname || undefined,
+        notes: newAccount.notes || undefined,
+        isPrimary: accounts.length === 0,
+      });
+      toast.success('Starlink account added');
+      setNewAccount({ email: '', accountNumber: '', nickname: '', notes: '' });
+      setShowAddAccount(false);
+      const res = await api.get(`/starlink-accounts/customer/${customer.id}`);
+      setAccounts(res.data.data);
+      onRefresh();
+    } catch (err) {
+      toast.error('Failed to add account');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleSetPrimary = async (accountId: string) => {
+    try {
+      await api.put(`/starlink-accounts/${accountId}/set-primary`);
+      toast.success('Primary account updated');
+      const res = await api.get(`/starlink-accounts/customer/${customer.id}`);
+      setAccounts(res.data.data);
+      onRefresh();
+    } catch (err) {
+      toast.error('Failed to update primary account');
+    }
+  };
+
+  const handleDeleteAccount = async (accountId: string) => {
+    if (!confirm('Delete this Starlink account?')) return;
+    try {
+      await api.delete(`/starlink-accounts/${accountId}`);
+      toast.success('Account deleted');
+      const res = await api.get(`/starlink-accounts/customer/${customer.id}`);
+      setAccounts(res.data.data);
+      onRefresh();
+    } catch (err) {
+      toast.error('Failed to delete account');
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="flex items-center justify-between p-6 border-b sticky top-0 bg-white z-10">
+          <div>
+            <h2 className="text-xl font-bold">{customer.fullName || customer.facebookName || 'Customer'}</h2>
+            <p className="text-sm text-gray-500">PSID: {customer.messengerPsid}</p>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg">✕</button>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-gray-500">Full Name</p>
+              <p className="font-medium">{customer.fullName || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Facebook Name</p>
+              <p className="font-medium">{customer.facebookName || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Contact Number</p>
+              <p className="font-medium">{customer.contactNumber || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Email Address</p>
+              <p className="font-medium">{customer.emailAddress || 'N/A'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Data Collected By</p>
+              <span className={cn(
+                'px-2 py-1 rounded-full text-xs font-medium',
+                customer.dataCollectedBy === 'bot' ? 'bg-blue-100 text-blue-800' : 'bg-green-100 text-green-800'
+              )}>
+                {customer.dataCollectedBy}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Review Status</p>
+              <span className={cn(
+                'px-2 py-1 rounded-full text-xs font-medium',
+                customer.reviewStatus === 'APPROVED' ? 'bg-green-100 text-green-800' :
+                customer.reviewStatus === 'REJECTED' ? 'bg-red-100 text-red-800' :
+                'bg-yellow-100 text-yellow-800'
+              )}>
+                {customer.reviewStatus.replace('_', ' ')}
+              </span>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Billing Requests</p>
+              <p className="font-medium">{customer._count?.billingRequests ?? 0}</p>
+            </div>
+            <div>
+              <p className="text-xs text-gray-500">Conversations</p>
+              <p className="font-medium">{customer._count?.conversations ?? 0}</p>
+            </div>
+          </div>
+
+          <div className="border-t pt-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Satellite className="w-5 h-5 text-primary-600" />
+                Starlink Accounts ({accounts.length})
+              </h3>
+              <button
+                onClick={() => setShowAddAccount(!showAddAccount)}
+                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700"
+              >
+                <UserPlus className="w-3.5 h-3.5" />
+                Add Account
+              </button>
+            </div>
+
+            {showAddAccount && (
+              <form onSubmit={handleAddAccount} className="mb-4 p-4 bg-gray-50 rounded-lg space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Starlink Email *</label>
+                    <input
+                      type="email"
+                      value={newAccount.email}
+                      onChange={(e) => setNewAccount({ ...newAccount, email: e.target.value })}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-700 mb-1">Account Number</label>
+                    <input
+                      type="text"
+                      value={newAccount.accountNumber}
+                      onChange={(e) => setNewAccount({ ...newAccount, accountNumber: e.target.value })}
+                      className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">Nickname</label>
+                  <input
+                    type="text"
+                    value={newAccount.nickname}
+                    onChange={(e) => setNewAccount({ ...newAccount, nickname: e.target.value })}
+                    className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="e.g., Home, Office"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddAccount(false)}
+                    className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-100"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submitting}
+                    className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 disabled:opacity-50"
+                  >
+                    {submitting ? 'Adding...' : 'Add Account'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {loadingAccounts ? (
+              <div className="text-center py-4 text-gray-500">Loading accounts...</div>
+            ) : accounts.length === 0 ? (
+              <div className="text-center py-6 text-gray-500 bg-gray-50 rounded-lg">
+                <Satellite className="w-8 h-8 mx-auto mb-2 text-gray-300" />
+                <p>No Starlink accounts registered</p>
+                <p className="text-xs mt-1">Click "Add Account" to register one</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {accounts.map((account) => (
+                  <div
+                    key={account.id}
+                    className={cn(
+                      'flex items-center justify-between p-3 rounded-lg border',
+                      account.isPrimary ? 'border-primary-200 bg-primary-50' : 'border-gray-200 bg-white'
+                    )}
+                  >
+                    <div className="flex items-center gap-3">
+                      <Satellite className={cn('w-4 h-4', account.isPrimary ? 'text-primary-600' : 'text-gray-400')} />
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{account.email}</span>
+                          {account.isPrimary && (
+                            <Star className="w-3.5 h-3.5 text-yellow-500 fill-yellow-500" />
+                          )}
+                          {!account.isActive && (
+                            <span className="px-1.5 py-0.5 text-xs bg-gray-200 text-gray-600 rounded">Inactive</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                          {account.accountNumber && <span>#{account.accountNumber}</span>}
+                          {account.nickname && <span>({account.nickname})</span>}
+                          <span>Created {formatDate(account.createdAt)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {!account.isPrimary && (
+                        <button
+                          onClick={() => handleSetPrimary(account.id)}
+                          className="p-1.5 text-gray-400 hover:text-yellow-600 hover:bg-yellow-50 rounded"
+                          title="Set as primary"
+                        >
+                          <Star className="w-4 h-4" />
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteAccount(account.id)}
+                        className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
+                        title="Delete account"
+                      >
+                        <XCircle className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="mt-3">
+              <a
+                href={`/dashboard/starlink-accounts?customerId=${customer.id}`}
+                className="flex items-center gap-1 text-sm text-primary-600 hover:text-primary-800"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                View all accounts in Starlink Accounts page
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -460,23 +771,26 @@ function AddCustomerModal({ onClose, onRefresh }: { onClose: () => void; onRefre
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Starlink Email</label>
-            <input
-              type="email"
-              value={formData.starlinkEmail}
-              onChange={(e) => setFormData({ ...formData, starlinkEmail: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Starlink Account</label>
-            <input
-              type="text"
-              value={formData.starlinkAccount}
-              onChange={(e) => setFormData({ ...formData, starlinkAccount: e.target.value })}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
-            />
+          <div className="border-t pt-4">
+            <h3 className="text-sm font-semibold text-gray-900 mb-3">Primary Starlink Account</h3>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Starlink Email</label>
+              <input
+                type="email"
+                value={formData.starlinkEmail}
+                onChange={(e) => setFormData({ ...formData, starlinkEmail: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
+            <div className="mt-3">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Starlink Account Number</label>
+              <input
+                type="text"
+                value={formData.starlinkAccount}
+                onChange={(e) => setFormData({ ...formData, starlinkAccount: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              />
+            </div>
           </div>
 
           <div className="flex gap-2 pt-4">

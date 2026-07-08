@@ -93,7 +93,7 @@ export class CustomersService {
         take: limit,
         orderBy: { createdAt: 'desc' },
         include: {
-          _count: { select: { billingRequests: true, conversations: true } },
+          _count: { select: { billingRequests: true, conversations: true, starlinkAccounts: true } },
         },
       }),
       this.prisma.customer.count({ where }),
@@ -136,6 +136,18 @@ export class CustomersService {
     await this.prisma.conversationContext.create({
       data: { customerId: customer.id },
     });
+
+    // Create Starlink account if email provided
+    if (data.starlinkEmail) {
+      await this.prisma.starlinkAccount.create({
+        data: {
+          customerId: customer.id,
+          email: data.starlinkEmail,
+          accountNumber: data.starlinkAccount,
+          isPrimary: true,
+        },
+      });
+    }
 
     await this.prisma.activityLog.create({
       data: {

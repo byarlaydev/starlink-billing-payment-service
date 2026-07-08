@@ -1,4 +1,4 @@
-import { Controller, Post, Body, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Get, Post, Body, UseGuards, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -15,6 +15,15 @@ export class PlaygroundController {
   private readonly logger = new Logger(PlaygroundController.name);
 
   constructor(private readonly aiService: AIService) {}
+
+  @Get('config-check')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
+  @ApiOperation({ summary: 'Check AI config status' })
+  async configCheck() {
+    const envKey = !!process.env['GEMINI_API_KEY'];
+    const effective = await this.aiService['getEffectiveConfig']();
+    return { envKeySet: envKey, effectiveApiKeySet: !!effective.apiKey, effectiveApiKeyPrefix: (effective.apiKey || '').substring(0, 6) };
+  }
 
   @Post('chat')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)

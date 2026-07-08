@@ -102,6 +102,7 @@ enum KnowledgeCategory {
 model Customer {
   id               String             @id @default(uuid())
   messengerPsid    String             @unique
+  inventChatId     String?            @unique
   fullName         String?
   facebookName     String?
   contactNumber    String?

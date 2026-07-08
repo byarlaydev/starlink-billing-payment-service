@@ -5,6 +5,17 @@
 :root {
   --foreground: #171717;
   --background: #f8fafc;
+  --card: #ffffff;
+  --card-border: #e5e7eb;
+  --card-hover: #f9fafb;
+}
+
+.dark {
+  --foreground: #f1f5f9;
+  --background: #0f172a;
+  --card: #1e293b;
+  --card-border: #334155;
+  --card-hover: #334155;
 }
 
 body {
@@ -18,3 +29,76 @@ body {
     text-wrap: balance;
   }
 }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out;
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, #e5e7eb 25%, #f3f4f6 50%, #e5e7eb 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+}
+
+.dark .animate-shimmer {
+  background: linear-gradient(90deg, #334155 25%, #475569 50%, #334155 75%);
+  background-size: 200% 100%;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: #475569;
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+.bg-card { background-color: var(--card); }
+.border-card { border-color: var(--card-border); }
+.text-foreground { color: var(--foreground); }
+.hover\:bg-card-hover:hover { background-color: var(--card-hover); }
+
+.dark .bg-card { background-color: var(--card); }
+.dark .border-card { border-color: var(--card-border); }
+.dark .text-foreground { color: var(--foreground); }
+.dark .hover\:bg-card-hover:hover { background-color: var(--card-hover); }
+
+.dark .bg-gray-50 { background-color: #1e293b; }
+.dark .bg-gray-100 { background-color: #334155; }

@@ -4,6 +4,7 @@ import { PrismaService } from '../../config/prisma.service';
 import { AIService } from '../../ai/ai.service';
 import { CustomersService } from '../customers/customers.service';
 import { BillingService } from '../billing/billing.service';
+import { MessagingService } from '../../messaging/messaging.service';
 import { ConversationState, Language } from '@prisma/client';
 
 interface MessengerEvent {
@@ -45,7 +46,6 @@ interface CustomerContext {
 @Injectable()
 export class MessengerService {
   private readonly logger = new Logger(MessengerService.name);
-  private readonly pageAccessToken: string;
 
   constructor(
     private readonly configService: ConfigService,
@@ -53,9 +53,8 @@ export class MessengerService {
     private readonly aiService: AIService,
     private readonly customersService: CustomersService,
     private readonly billingService: BillingService,
-  ) {
-    this.pageAccessToken = this.configService.get<string>('FB_PAGE_ACCESS_TOKEN', '');
-  }
+    private readonly messagingService: MessagingService,
+  ) {}
 
   private async loadFullCustomerContext(customerId: string, psid: string): Promise<CustomerContext> {
     const customer = await this.customersService.findOrCreate(psid);
@@ -137,6 +136,46 @@ export class MessengerService {
       await this.handleMessage(event);
     } else if (event.postback) {
       await this.handlePostback(event);
+    }
+  }
+
+  async handleInventInbound(psid: string, text: string) {
+    const context = await this.loadFullCustomerContext(psid, psid);
+    const customer = context.customer;
+
+    if (customer.isAdminTakeover) {
+      this.logger.log(`Invent message from ${psid} queued for admin (takeover active)`);
+      return;
+    }
+
+    const lowerText = text.toLowerCase().trim();
+
+    if (['confirm_info', 'start_billing', 'check_status', 'faq', 'escalate'].includes(lowerText)) {
+      await this.handleQuickReply(customer, lowerText.toUpperCase(), context);
+      return;
+    }
+
+    const sessionStep = context.conversationContext?.sessionStep || 'greeting';
+
+    if (customer.conversationState === 'COLLECTING_INFO' && sessionStep !== 'greeting') {
+      await this.collectBillingInfo(customer, text, context.conversationContext, context);
+      return;
+    }
+
+    const recentContext = context.conversationHistory.map(c => c.content);
+
+    await this.customersService.updateConversationContext(customer.id, {
+      recentMessages: recentContext.slice(-10),
+      lastActiveAt: new Date(),
+    });
+
+    try {
+      const intent = await this.aiService.detectIntent(text, recentContext);
+      await this.processIntent(customer, text, intent, context);
+    } catch (error) {
+      this.logger.error('AI processing failed for Invent message', error);
+      await this.messagingService.sendMessage(psid,
+        "Sorry, I'm having a bit of trouble right now. Please try again in a moment, or type 'agent' to talk to someone.");
     }
   }
 
@@ -239,10 +278,10 @@ export class MessengerService {
         break;
       case 'TALK_TO_BOT':
         await this.customersService.releaseTakeover(customer.id);
-        await this.sendTextMessage(customer.messengerPsid, 'No problem! I\'m back. What can I help you with?');
+        await this.messagingService.sendMessage(customer.messengerPsid, 'No problem! I\'m back. What can I help you with?');
         break;
       default:
-        await this.sendTextMessage(customer.messengerPsid, "Hmm, I'm not quite sure what you mean there. Could you try rephrasing that, or just let me know what you need help with?");
+        await this.messagingService.sendMessage(customer.messengerPsid, "Hmm, I'm not quite sure what you mean there. Could you try rephrasing that, or just let me know what you need help with?");
     }
   }
 
@@ -316,7 +355,7 @@ export class MessengerService {
         if (!isNaN(amount)) {
           collected.billingAmount = amount;
         } else {
-          await this.sendTextMessage(customer.messengerPsid, 'No worries, just need the number. Could you try again? Something like 120.50 would work.');
+          await this.messagingService.sendMessage(customer.messengerPsid, 'No worries, just need the number. Could you try again? Something like 120.50 would work.');
           return;
         }
         break;
@@ -377,10 +416,10 @@ export class MessengerService {
     };
 
     const message = prompts[step] || 'How can I help you?';
-    await this.sendTextMessage(customer.messengerPsid, message);
+    await this.messagingService.sendMessage(customer.messengerPsid, message);
 
     if (step === 'confirm_info') {
-      await this.sendQuickReplies(customer.messengerPsid, [
+      await this.messagingService.sendQuickReplies(customer.messengerPsid, 'Please select an option:', [
         { title: 'Looks Good', payload: 'CONFIRM_INFO' },
         { title: 'Start Over', payload: 'START_BILLING' },
       ]);
@@ -439,14 +478,14 @@ export class MessengerService {
       lastActiveAt: new Date(),
     });
 
-    await this.sendTextMessage(customer.messengerPsid, response.text);
+    await this.messagingService.sendMessage(customer.messengerPsid, response.text);
   }
 
   private async handleAttachment(customer: any, message: any) {
     const attachment = message.attachments[0];
     if (attachment.type === 'image' || attachment.type === 'file') {
       const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
-      await this.sendTextMessage(customer.messengerPsid,
+      await this.messagingService.sendMessage(customer.messengerPsid,
         `Thanks${firstName ? `, ${firstName}` : ''}! I've got your payment proof. I'll take a look at it right away and get back to you with a confirmation shortly. 👍`);
 
       await this.customersService.update(customer.id, { conversationState: 'PROCESSING_PAYMENT' });
@@ -478,8 +517,8 @@ Just so you know, we're an independent third-party service - not affiliated with
 
 What can I help you with today?`;
 
-    await this.sendTextMessage(customer.messengerPsid, message);
-    await this.sendQuickReplies(customer.messengerPsid, [
+    await this.messagingService.sendMessage(customer.messengerPsid, message);
+    await this.messagingService.sendQuickReplies(customer.messengerPsid, 'Please select an option:', [
       { title: 'Submit Payment', payload: 'START_BILLING' },
       { title: 'Check Status', payload: 'CHECK_STATUS' },
       { title: 'FAQ', payload: 'FAQ' },
@@ -519,7 +558,7 @@ What can I help you with today?`;
       collectedData: prefillData,
     });
 
-    await this.sendTextMessage(customer.messengerPsid, message);
+    await this.messagingService.sendMessage(customer.messengerPsid, message);
   }
 
   private async handleStarlinkAccountSelection(customer: any, context: CustomerContext) {
@@ -534,7 +573,7 @@ What can I help you with today?`;
         sessionStep: 'collect_starlink_email',
         collectedData: collected,
       });
-      await this.sendTextMessage(customer.messengerPsid, 
+      await this.messagingService.sendMessage(customer.messengerPsid, 
         `${firstName ? `No worries, ${firstName}!` : 'No worries!'} What email did you use for your Starlink account?`);
       return;
     }
@@ -553,7 +592,7 @@ What can I help you with today?`;
         collectedData: collected,
       });
       
-      await this.sendTextMessage(customer.messengerPsid,
+      await this.messagingService.sendMessage(customer.messengerPsid,
         `${firstName ? `Great, ${firstName}!` : 'Great!'} I found your Starlink account (${account.email}). What's the billing amount you're looking to pay?`);
       return;
     }
@@ -576,7 +615,7 @@ What can I help you with today?`;
       collectedData: (contextData?.collectedData as any) || {},
     });
 
-    await this.sendTextMessage(customer.messengerPsid, accountList);
+    await this.messagingService.sendMessage(customer.messengerPsid, accountList);
   }
 
   private async processStarlinkAccountSelection(customer: any, text: string, context: CustomerContext) {
@@ -585,7 +624,7 @@ What can I help you with today?`;
     const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
 
     if (isNaN(selection) || selection < 1 || selection > accounts.length) {
-      await this.sendTextMessage(customer.messengerPsid,
+      await this.messagingService.sendMessage(customer.messengerPsid,
         `Hmm, that's not quite right. Please reply with a number between 1 and ${accounts.length}.`);
       return;
     }
@@ -606,7 +645,7 @@ What can I help you with today?`;
       ? `${selectedAccount.email} (${selectedAccount.nickname})`
       : selectedAccount.email;
 
-    await this.sendTextMessage(customer.messengerPsid,
+    await this.messagingService.sendMessage(customer.messengerPsid,
       `${firstName ? `Perfect, ${firstName}!` : 'Perfect!'} Using ${accountDisplay}. What's the billing amount you're looking to pay?`);
   }
 
@@ -615,7 +654,7 @@ What can I help you with today?`;
     const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
 
     if (billingHistory.length === 0) {
-      await this.sendTextMessage(customer.messengerPsid, 
+      await this.messagingService.sendMessage(customer.messengerPsid, 
         `${firstName ? `Hey ${firstName}, ` : ''}looks like you don't have any billing requests yet. Want to submit one now?`);
       return;
     }
@@ -625,7 +664,7 @@ What can I help you with today?`;
                        latest.status === 'REJECTED' ? '❌' : 
                        latest.status === 'PROCESSING' ? '⏳' : '📋';
 
-    await this.sendTextMessage(customer.messengerPsid,
+    await this.messagingService.sendMessage(customer.messengerPsid,
       `${firstName ? `${firstName}, ` : ''}here's your latest billing request:\n\n` +
       `${statusEmoji} Request ID: ${latest.requestId}\n` +
       `💰 Amount: $${latest.billingAmount}\n` +
@@ -648,14 +687,14 @@ What can I help you with today?`;
       language,
     );
 
-    await this.sendTextMessage(customer.messengerPsid, faqResponse.text);
+    await this.messagingService.sendMessage(customer.messengerPsid, faqResponse.text);
   }
 
   private async escalateToHuman(customer: any, context?: CustomerContext) {
     await this.customersService.update(customer.id, { conversationState: 'ESCALATED' });
     const firstName = customer.fullName?.split(' ')[0] || customer.facebookName?.split(' ')[0] || '';
     
-    await this.sendTextMessage(customer.messengerPsid,
+    await this.messagingService.sendMessage(customer.messengerPsid,
       `${firstName ? `No problem, ${firstName}.` : 'No problem.'} I'll get one of our team members to help you out. They'll be with you shortly. Thanks for your patience! 🙏`);
   }
 
@@ -683,53 +722,12 @@ What can I help you with today?`;
         sessionStep: 'awaiting_payment_proof',
       });
 
-      await this.sendTextMessage(customer.messengerPsid,
+      await this.messagingService.sendMessage(customer.messengerPsid,
         `${firstName ? `Awesome, ${firstName}!` : 'Awesome!'} Your billing request is all set. Now just upload your payment proof - that can be a screenshot, receipt, or PDF. I'll take it from there.`);
     } catch (error) {
       this.logger.error('Failed to create billing request', error);
-      await this.sendTextMessage(customer.messengerPsid,
+      await this.messagingService.sendMessage(customer.messengerPsid,
         `Hmm, something went wrong while submitting your request. Let's try again, or if you prefer, I can get a human to help you out.`);
-    }
-  }
-
-  async sendTextMessage(recipientId: string, text: string) {
-    try {
-      const response = await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${this.pageAccessToken}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipient: { id: recipientId },
-          message: { text },
-        }),
-      });
-
-      if (!response.ok) {
-        this.logger.error(`Failed to send message: ${await response.text()}`);
-      }
-    } catch (error) {
-      this.logger.error('Error sending Messenger message', error);
-    }
-  }
-
-  private async sendQuickReplies(recipientId: string, replies: { title: string; payload: string }[]) {
-    try {
-      await fetch(`https://graph.facebook.com/v19.0/me/messages?access_token=${this.pageAccessToken}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          recipient: { id: recipientId },
-          message: {
-            text: 'Please select an option:',
-            quick_replies: replies.map(r => ({
-              content_type: 'text',
-              title: r.title,
-              payload: r.payload,
-            })),
-          },
-        }),
-      });
-    } catch (error) {
-      this.logger.error('Error sending quick replies', error);
     }
   }
 

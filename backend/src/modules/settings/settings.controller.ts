@@ -1,6 +1,7 @@
-import { Controller, Get, Put, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Put, Post, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
+import { InventPollingService } from '../../messaging/invent-polling.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -11,7 +12,10 @@ import { Role } from '@prisma/client';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class SettingsController {
-  constructor(private readonly settingsService: SettingsService) {}
+  constructor(
+    private readonly settingsService: SettingsService,
+    private readonly inventPollingService: InventPollingService,
+  ) {}
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.ADMIN)
@@ -35,6 +39,30 @@ export class SettingsController {
     @Body() updates: Record<string, string>,
     @Request() req: any,
   ) {
-    return this.settingsService.updateBatch(category, updates, req.user?.sub);
+    const result = await this.settingsService.updateBatch(category, updates, req.user?.sub);
+
+    if (category === 'messenger') {
+      this.settingsService.clearCache();
+      await this.inventPollingService.restartPolling();
+    }
+
+    return result;
+  }
+
+  @Post('messenger/polling/restart')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Restart Invent polling service' })
+  async restartPolling() {
+    await this.inventPollingService.restartPolling();
+    return { success: true, message: 'Polling service restarted' };
+  }
+
+  @Get('messenger/polling/status')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Get Invent polling service status' })
+  async getPollingStatus() {
+    return {
+      lastPollTime: this.inventPollingService.getLastPollTime(),
+    };
   }
 }

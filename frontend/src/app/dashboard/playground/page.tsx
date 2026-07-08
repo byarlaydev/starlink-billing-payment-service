@@ -48,24 +48,24 @@ export default function PlaygroundPage() {
 
   return (
     <div className="flex h-[calc(100vh-6rem)] -m-6">
-      <div className="flex-1 flex flex-col bg-white">
+      <div className="flex-1 flex flex-col bg-card">
         {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-card-border">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-primary-100 flex items-center justify-center">
               <Bot className="w-5 h-5 text-primary-600" />
             </div>
             <div>
-              <h2 className="text-sm font-bold text-gray-900">Bot Playground</h2>
-              <p className="text-xs text-gray-500">Test the AI bot responses</p>
+              <h2 className="text-sm font-bold text-foreground">Bot Playground</h2>
+              <p className="text-xs text-foreground opacity-50">Test the AI bot responses</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <Globe className="w-4 h-4 text-gray-400" />
+            <Globe className="w-4 h-4 text-foreground opacity-40" />
             <select
               value={language}
               onChange={(e) => setLanguage(e.target.value as 'EN' | 'MY')}
-              className="text-sm border border-gray-300 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="text-sm border border-gray-300 dark:border-gray-600 rounded-lg px-3 py-1.5 focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             >
               <option value="EN">English</option>
               <option value="MY">Myanmar</option>
@@ -78,8 +78,8 @@ export default function PlaygroundPage() {
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-center">
               <Bot className="w-16 h-16 text-gray-200 mb-4" />
-              <h3 className="text-lg font-semibold text-gray-900 mb-1">Bot Playground</h3>
-              <p className="text-sm text-gray-500 max-w-md">
+              <h3 className="text-lg font-semibold text-foreground mb-1">Bot Playground</h3>
+              <p className="text-sm text-foreground opacity-50 max-w-md">
                 Send a message to test how the AI bot responds. Messages are not sent to any customer.
               </p>
             </div>
@@ -90,12 +90,12 @@ export default function PlaygroundPage() {
                   className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
                     msg.role === 'user'
                       ? 'bg-primary-100 text-primary-900 rounded-tr-sm'
-                      : 'bg-gray-100 text-gray-900 rounded-tl-sm'
+                      : 'bg-gray-100 text-foreground rounded-tl-sm'
                   }`}
                 >
                   <div className="text-sm whitespace-pre-wrap break-words">{msg.content}</div>
                   <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-[10px] text-gray-500">
+                    <span className="text-[10px] text-foreground opacity-50">
                       {msg.timestamp.toLocaleTimeString()}
                     </span>
                     {msg.role === 'assistant' && (
@@ -108,8 +108,8 @@ export default function PlaygroundPage() {
           )}
           {loading && (
             <div className="flex justify-start">
-              <div className="bg-gray-100 text-gray-900 rounded-2xl rounded-tl-sm px-4 py-3">
-                <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
+              <div className="bg-gray-100 text-foreground rounded-2xl rounded-tl-sm px-4 py-3">
+                <Loader2 className="w-5 h-5 animate-spin text-foreground opacity-40" />
               </div>
             </div>
           )}
@@ -117,7 +117,7 @@ export default function PlaygroundPage() {
         </div>
 
         {/* Input */}
-        <div className="px-6 py-4 border-t border-gray-200">
+        <div className="px-6 py-4 border-t border-card-border">
           <div className="flex gap-2">
             <input
               type="text"
@@ -126,7 +126,7 @@ export default function PlaygroundPage() {
               onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && (e.preventDefault(), sendMessage())}
               placeholder="Type a message to test the bot..."
               disabled={loading}
-              className="flex-1 px-4 py-2.5 text-sm border border-gray-300 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+              className="flex-1 px-4 py-2.5 text-sm border border-gray-300 dark:border-gray-600 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent disabled:bg-gray-50 disabled:text-foreground disabled:opacity-40"
             />
             <button
               onClick={sendMessage}

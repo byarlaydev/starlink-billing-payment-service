@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/lib/store';
 import { Sidebar } from '@/components/layout/sidebar';
@@ -10,6 +10,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const { isAuthenticated } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -17,14 +18,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     }
   }, [isAuthenticated, router]);
 
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
+
   if (!isAuthenticated) return null;
 
   return (
     <div className="flex h-screen overflow-hidden">
-      <Sidebar currentPath={pathname} />
+      <Sidebar currentPath={pathname} isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
       <div className="flex-1 flex flex-col overflow-hidden">
-        <Header />
-        <main className="flex-1 overflow-y-auto p-6 bg-gray-50">
+        <Header onMenuClick={() => setSidebarOpen(true)} />
+        <main className="flex-1 overflow-y-auto p-4 lg:p-6 bg-gray-50">
           {children}
         </main>
       </div>

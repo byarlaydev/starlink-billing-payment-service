@@ -15,6 +15,7 @@ import { QueueModule } from './modules/queue/queue.module';
 import { HealthModule } from './modules/health/health.module';
 import { AdminModule } from './modules/admin/admin.module';
 import { AIModule } from './ai/ai.module';
+import { MessagingModule } from './messaging/messaging.module';
 import { KnowledgeBaseModule } from './modules/knowledge-base/knowledge-base.module';
 import { StarlinkAccountsModule } from './modules/starlink-accounts/starlink-accounts.module';
 import { RegionPlanModule } from './modules/region-plan/region-plan.module';
@@ -32,6 +33,7 @@ import { PlaygroundModule } from './modules/playground/playground.module';
     }]),
     PrismaModule,
     AIModule,
+    MessagingModule,
     AuthModule,
     CustomersModule,
     BillingModule,

@@ -1,10 +1,9 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '@/lib/api';
 import { useAuthStore } from '@/lib/store';
 import { formatDate, cn } from '@/lib/utils';
-import { getErrorMessage } from '@/lib/error-utils';
 import { toast } from 'sonner';
 import {
   BarChart3,
@@ -14,13 +13,12 @@ import {
   AlertTriangle,
   Clock,
   CheckCircle,
-  XCircle,
   FileText,
   MessageSquare,
   ArrowRight,
-  Loader2,
   RefreshCw,
   TrendingUp,
+  DollarSign,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -65,15 +63,6 @@ const STATUS_COLORS = {
   MANUAL_REVIEW: '#F97316',
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  PENDING: 'Pending',
-  PROCESSING: 'Processing',
-  APPROVED: 'Approved',
-  COMPLETED: 'Completed',
-  REJECTED: 'Rejected',
-  MANUAL_REVIEW: 'Manual Review',
-};
-
 export default function DashboardPage() {
   const user = useAuthStore((s) => s.user);
   const [billingStats, setBillingStats] = useState<any>(null);
@@ -85,45 +74,49 @@ export default function DashboardPage() {
   const [recentBilling, setRecentBilling] = useState<RecentBilling[]>([]);
   const [recentCustomers, setRecentCustomers] = useState<RecentCustomer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const fetchSafe = useCallback(async (fn: () => Promise<any>, setter: (v: any) => void) => {
+    try { const res = await fn(); setter(res.data.data); } catch { /* silent */ }
+  }, []);
+
+  const fetchData = useCallback(async () => {
+    await Promise.all([
+      fetchSafe(() => api.get('/billing/stats'), setBillingStats),
+      fetchSafe(() => api.get('/billing/analytics'), setAnalytics),
+      fetchSafe(() => api.get('/customers', { params: { limit: 1 } }).then(r => { setCustomerCount(r.data.data.total); }), () => {}),
+      fetchSafe(() => api.get('/starlink-accounts/stats'), setAccountStats),
+      fetchSafe(() => api.get('/region-plan/stats'), setPlanStats),
+      fetchSafe(() => api.get('/customers/pending-review', { params: { limit: 1 } }).then(r => { setPendingReviews(r.data.data.total); }), () => {}),
+      fetchSafe(() => api.get('/billing', { params: { limit: 5 } }).then(r => { setRecentBilling(r.data.data.data); }), () => {}),
+      fetchSafe(() => api.get('/customers', { params: { limit: 5 } }).then(r => { setRecentCustomers(r.data.data.data); }), () => {}),
+    ]);
+    setLastUpdated(new Date());
+    setLoading(false);
+    setRefreshing(false);
+  }, [fetchSafe]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
 
   useEffect(() => {
-    const fetchData = async () => {
-      try {
-        const [
-          billingRes,
-          analyticsRes,
-          customersRes,
-          accountsRes,
-          plansRes,
-          pendingRes,
-          recentBillingRes,
-          recentCustomersRes,
-        ] = await Promise.all([
-          api.get('/billing/stats'),
-          api.get('/billing/analytics'),
-          api.get('/customers', { params: { limit: 1 } }),
-          api.get('/starlink-accounts/stats'),
-          api.get('/region-plan/stats'),
-          api.get('/customers/pending-review', { params: { limit: 1 } }),
-          api.get('/billing', { params: { limit: 5 } }),
-          api.get('/customers', { params: { limit: 5 } }),
-        ]);
-        setBillingStats(billingRes.data.data);
-        setAnalytics(analyticsRes.data.data);
-        setCustomerCount(customersRes.data.data.total);
-        setAccountStats(accountsRes.data.data);
-        setPlanStats(plansRes.data.data);
-        setPendingReviews(pendingRes.data.data.total);
-        setRecentBilling(recentBillingRes.data.data.data);
-        setRecentCustomers(recentCustomersRes.data.data.data);
-      } catch (err) {
-        toast.error(getErrorMessage(err));
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchData();
-  }, []);
+    intervalRef.current = setInterval(() => {
+      setRefreshing(true);
+      fetchData();
+    }, 30000);
+    return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
+  }, [fetchData]);
+
+  useEffect(() => {
+    const tick = setInterval(() => {
+      if (lastUpdated) setElapsed(Math.floor((Date.now() - lastUpdated.getTime()) / 1000));
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [lastUpdated]);
+
+  const handleRefresh = () => { setRefreshing(true); fetchData(); };
 
   const total = billingStats?.total ?? 0;
   const pending = billingStats?.pending ?? 0;
@@ -133,6 +126,9 @@ export default function DashboardPage() {
   const processing = billingStats?.processing ?? 0;
   const manualReview = billingStats?.manualReview ?? 0;
   const resolved = approved + completed + rejected;
+
+  const totalRevenue = (analytics?.monthlyData || [])
+    .reduce((sum: number, d: any) => sum + (d._sum?.billingAmount ?? 0), 0);
 
   const pieData = [
     { name: 'Pending', value: pending, color: STATUS_COLORS.PENDING },
@@ -153,24 +149,24 @@ export default function DashboardPage() {
 
   const getStatusBadge = (status: string) => {
     const styles: Record<string, string> = {
-      PENDING: 'bg-yellow-100 text-yellow-800',
-      PROCESSING: 'bg-blue-100 text-blue-800',
-      APPROVED: 'bg-green-100 text-green-800',
-      COMPLETED: 'bg-green-100 text-green-800',
-      REJECTED: 'bg-red-100 text-red-800',
-      MANUAL_REVIEW: 'bg-orange-100 text-orange-800',
+      PENDING: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300',
+      PROCESSING: 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300',
+      APPROVED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+      COMPLETED: 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300',
+      REJECTED: 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300',
+      MANUAL_REVIEW: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300',
     };
-    return styles[status] || 'bg-gray-100 text-gray-800';
+    return styles[status] || 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
   };
 
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload?.length) {
       return (
-        <div className="bg-white border border-gray-200 rounded-lg shadow-lg px-3 py-2 text-sm">
-          <p className="font-medium text-gray-900">{label}</p>
-          <p className="text-gray-600">{payload[0].value} requests</p>
+        <div className="bg-card border border-card-border rounded-lg shadow-lg px-3 py-2 text-sm">
+          <p className="font-medium text-foreground">{label}</p>
+          <p className="text-foreground opacity-60">{payload[0].value} requests</p>
           {payload[0].payload.amount > 0 && (
-            <p className="text-gray-500">${Number(payload[0].payload.amount).toFixed(2)}</p>
+            <p className="text-foreground opacity-50">${Number(payload[0].payload.amount).toFixed(2)}</p>
           )}
         </div>
       );
@@ -180,9 +176,16 @@ export default function DashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[60vh] text-gray-500">
-        <Loader2 className="w-5 h-5 mr-2 animate-spin" />
-        Loading dashboard...
+      <div className="space-y-6">
+        <div className="h-8 w-64 rounded animate-shimmer" />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          {[1,2,3,4,5,6,7,8].map(i => (
+            <div key={i} className="bg-card border border-card-border rounded-xl p-6">
+              <div className="h-4 w-20 rounded animate-shimmer mb-3" />
+              <div className="h-8 w-16 rounded animate-shimmer" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
@@ -192,22 +195,35 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-2xl font-bold text-foreground">
             Welcome back{user?.fullName ? `, ${user.fullName.split(' ')[0]}` : ''}
           </h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-foreground opacity-50 mt-1">
             {new Date().toLocaleDateString('en-US', {
               weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
             })}
           </p>
         </div>
-        <Link
-          href="/dashboard/requests"
-          className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium"
-        >
-          <FileText className="w-4 h-4" />
-          New Billing Request
-        </Link>
+        <div className="flex items-center gap-3">
+          {lastUpdated && (
+            <span className="text-xs text-foreground opacity-40">{elapsed}s ago</span>
+          )}
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="p-2 text-foreground opacity-40 hover:text-primary-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+            title="Refresh"
+          >
+            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
+          </button>
+          <Link
+            href="/dashboard/requests"
+            className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg hover:bg-primary-700 text-sm font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            New Billing Request
+          </Link>
+        </div>
       </div>
 
       {/* Stat Cards */}
@@ -225,7 +241,7 @@ export default function DashboardPage() {
           },
           {
             label: 'Starlink Accounts', value: accountStats?.total ?? 0,
-            sub: `${accountStats?.total ?? 0} registered`,
+            sub: `${accountStats?.active ?? 0} active · ${accountStats?.primary ?? 0} primary`,
             href: '/dashboard/starlink-accounts', icon: Satellite, color: 'bg-purple-50 text-purple-600',
           },
           {
@@ -239,19 +255,19 @@ export default function DashboardPage() {
             <Link
               key={card.label}
               href={card.href}
-              className="relative bg-white rounded-xl border border-gray-200 p-5 hover:shadow-lg transition-all overflow-hidden group"
+              className="relative bg-card border border-card-border rounded-xl p-5 hover:shadow-lg transition-all overflow-hidden group"
             >
               <div className={`absolute top-0 right-0 w-24 h-24 ${card.color.replace('text', 'bg').replace('600', '50')} rounded-bl-full -mr-8 -mt-8 group-hover:bg-opacity-80 transition-colors`} />
               <div className="relative">
                 <div className={`w-10 h-10 rounded-lg ${card.color} flex items-center justify-center mb-3`}>
                   <Icon className="w-5 h-5" />
                 </div>
-                <p className="text-2xl font-bold text-gray-900">{card.value}</p>
-                <p className="text-sm text-gray-500 mt-0.5">{card.label}</p>
-                <p className="text-xs text-gray-400 mt-0.5">{card.sub}</p>
+                <p className="text-2xl font-bold text-foreground">{card.value}</p>
+                <p className="text-sm text-foreground opacity-60 mt-0.5">{card.label}</p>
+                <p className="text-xs text-foreground opacity-40 mt-0.5">{card.sub}</p>
                 {'progress' in card && (
                   <div className="flex items-center gap-2 mt-2">
-                    <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                    <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                       <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${card.progress}%` }} />
                     </div>
                   </div>
@@ -265,10 +281,10 @@ export default function DashboardPage() {
       {/* Charts Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Status Donut Chart */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Request Status</h2>
+        <div className="bg-card border border-card-border rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-4">Request Status</h2>
           {pieData.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No data</p>
+            <p className="text-sm text-foreground opacity-40 text-center py-8">No data</p>
           ) : (
             <div className="flex items-center gap-4">
               <div className="w-36 h-36 shrink-0">
@@ -296,9 +312,9 @@ export default function DashboardPage() {
                   <div key={item.name} className="flex items-center justify-between text-xs">
                     <div className="flex items-center gap-1.5">
                       <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: item.color }} />
-                      <span className="text-gray-600">{item.name}</span>
+                      <span className="text-foreground opacity-60">{item.name}</span>
                     </div>
-                    <span className="font-medium text-gray-900">{item.value}</span>
+                    <span className="font-medium text-foreground">{item.value}</span>
                   </div>
                 ))}
               </div>
@@ -307,31 +323,36 @@ export default function DashboardPage() {
         </div>
 
         {/* Quick Actions */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Quick Actions</h2>
+        <div className="bg-card border border-card-border rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-4">Quick Actions</h2>
           <div className="space-y-2">
             {[
-              { label: 'New Billing Request', href: '/dashboard/requests', icon: FileText, desc: 'Create a billing request' },
-              { label: 'Messenger', href: '/dashboard/messenger', icon: MessageSquare, desc: 'Chat with customers' },
-              { label: 'Manual Review', href: '/dashboard/manual-review', icon: AlertTriangle, desc: `${manualReview} items to review` },
-              { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, desc: 'View reports and trends' },
-              { label: 'Knowledge Base', href: '/dashboard/knowledge-base', icon: TrendingUp, desc: 'Manage AI knowledge' },
+              { label: 'New Billing Request', href: '/dashboard/requests', icon: FileText, desc: 'Create a billing request', count: null },
+              { label: 'Messenger', href: '/dashboard/messenger', icon: MessageSquare, desc: 'Chat with customers', count: null },
+              { label: 'Manual Review', href: '/dashboard/manual-review', icon: AlertTriangle, desc: 'Items needing review', count: manualReview + pendingReviews },
+              { label: 'Analytics', href: '/dashboard/analytics', icon: BarChart3, desc: 'View reports and trends', count: null },
+              { label: 'Knowledge Base', href: '/dashboard/knowledge-base', icon: TrendingUp, desc: 'Manage AI knowledge', count: null },
             ].map((action) => {
               const Icon = action.icon;
               return (
                 <Link
                   key={action.href}
                   href={action.href}
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors group"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-card-hover transition-colors group"
                 >
                   <div className="w-9 h-9 rounded-lg bg-primary-50 text-primary-600 flex items-center justify-center shrink-0">
                     <Icon className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900">{action.label}</p>
-                    <p className="text-xs text-gray-500">{action.desc}</p>
+                    <p className="text-sm font-medium text-foreground">{action.label}</p>
+                    <p className="text-xs text-foreground opacity-50">{action.desc}</p>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-300 group-hover:text-primary-600 transition-colors shrink-0" />
+                  {action.count != null && action.count > 0 && (
+                    <span className="bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300 px-2 py-0.5 rounded-full text-xs font-medium">
+                      {action.count}
+                    </span>
+                  )}
+                  <ArrowRight className="w-4 h-4 text-foreground opacity-20 group-hover:text-primary-600 transition-colors shrink-0" />
                 </Link>
               );
             })}
@@ -339,8 +360,8 @@ export default function DashboardPage() {
         </div>
 
         {/* Today's Overview */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <h2 className="text-sm font-semibold text-gray-900 mb-4">Today's Overview</h2>
+        <div className="bg-card border border-card-border rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-foreground mb-4">Today's Overview</h2>
           <div className="space-y-4">
             <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
               <Clock className="w-5 h-5 text-blue-600" />
@@ -363,6 +384,15 @@ export default function DashboardPage() {
                 <p className="text-lg font-bold text-orange-700">{manualReview + pendingReviews}</p>
               </div>
             </div>
+            {totalRevenue > 0 && (
+              <div className="flex items-center gap-3 p-3 bg-indigo-50 rounded-lg">
+                <DollarSign className="w-5 h-5 text-indigo-600" />
+                <div>
+                  <p className="text-xs text-indigo-600 font-medium">Total Billed (All Time)</p>
+                  <p className="text-lg font-bold text-indigo-700">${totalRevenue.toFixed(2)}</p>
+                </div>
+              </div>
+            )}
             <div className="pt-2">
               <Link
                 href="/dashboard/analytics"
@@ -378,9 +408,9 @@ export default function DashboardPage() {
 
       {/* Monthly Trend Chart */}
       {monthlyData.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-card border border-card-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm font-semibold text-gray-900">Monthly Billing Trend</h2>
+            <h2 className="text-sm font-semibold text-foreground">Monthly Billing Trend</h2>
             <Link
               href="/dashboard/analytics"
               className="text-xs text-primary-600 hover:text-primary-700 font-medium"
@@ -408,34 +438,37 @@ export default function DashboardPage() {
 
       {/* Bottom Row: Recent Activity */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-card border border-card-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900">Recent Billing Requests</h2>
+            <h2 className="text-sm font-semibold text-foreground">Recent Billing Requests</h2>
             <Link href="/dashboard/requests" className="text-xs text-primary-600 hover:text-primary-700 font-medium">
               View all
             </Link>
           </div>
           {recentBilling.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No billing requests yet</p>
+            <div className="text-center py-8 text-foreground opacity-40">
+              <FileText className="w-8 h-8 mx-auto mb-2 text-foreground opacity-20 animate-float" />
+              <p className="text-sm">No billing requests yet</p>
+            </div>
           ) : (
             <div className="space-y-2">
               {recentBilling.map((req) => (
                 <Link
                   key={req.id}
                   href="/dashboard/requests"
-                  className="flex items-center justify-between p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center justify-between p-3 rounded-lg hover:bg-card-hover transition-colors"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium text-gray-900 truncate">{req.fullName}</p>
+                    <p className="text-sm font-medium text-foreground truncate">{req.fullName}</p>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="text-xs text-gray-500">{req.billingMonth}</span>
-                      <span className="text-xs text-gray-300">·</span>
-                      <span className="text-xs text-gray-500">{formatDate(req.createdAt)}</span>
+                      <span className="text-xs text-foreground opacity-50">{req.billingMonth}</span>
+                      <span className="text-xs text-foreground opacity-30">·</span>
+                      <span className="text-xs text-foreground opacity-50">{formatDate(req.createdAt)}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-3 ml-3">
                     {req.billingAmount != null && (
-                      <span className="text-sm font-medium text-gray-900">${Number(req.billingAmount).toFixed(2)}</span>
+                      <span className="text-sm font-medium text-foreground">${Number(req.billingAmount).toFixed(2)}</span>
                     )}
                     <span className={cn('px-2 py-0.5 rounded text-[10px] font-medium', getStatusBadge(req.status))}>
                       {req.status.replace('_', ' ')}
@@ -447,39 +480,42 @@ export default function DashboardPage() {
           )}
         </div>
 
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
+        <div className="bg-card border border-card-border rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-900">Recent Customers</h2>
+            <h2 className="text-sm font-semibold text-foreground">Recent Customers</h2>
             <Link href="/dashboard/customers" className="text-xs text-primary-600 hover:text-primary-700 font-medium">
               View all
             </Link>
           </div>
           {recentCustomers.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-8">No customers yet</p>
+            <div className="text-center py-8 text-foreground opacity-40">
+              <Users className="w-8 h-8 mx-auto mb-2 text-foreground opacity-20 animate-float" />
+              <p className="text-sm">No customers yet</p>
+            </div>
           ) : (
             <div className="space-y-2">
               {recentCustomers.map((customer) => (
                 <Link
                   key={customer.id}
                   href="/dashboard/customers"
-                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex items-center gap-3 p-3 rounded-lg hover:bg-card-hover transition-colors"
                 >
                   <div className="w-9 h-9 rounded-full bg-primary-100 text-primary-600 flex items-center justify-center shrink-0 text-sm font-semibold">
                     {(customer.fullName || customer.facebookName || '?').charAt(0).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-sm font-medium text-foreground truncate">
                       {customer.fullName || customer.facebookName || 'Unknown'}
                     </p>
-                    <div className="flex items-center gap-2 text-xs text-gray-500">
+                    <div className="flex items-center gap-2 text-xs text-foreground opacity-50">
                       <span className="truncate">{customer.messengerPsid}</span>
-                      <span className="text-gray-300">·</span>
+                      <span className="text-foreground opacity-30">·</span>
                       <span>{customer._count.conversations} messages</span>
-                      <span className="text-gray-300">·</span>
+                      <span className="text-foreground opacity-30">·</span>
                       <span className="uppercase">{customer.preferredLang}</span>
                     </div>
                   </div>
-                  <ArrowRight className="w-4 h-4 text-gray-300 shrink-0" />
+                  <ArrowRight className="w-4 h-4 text-foreground opacity-20 shrink-0" />
                 </Link>
               ))}
             </div>

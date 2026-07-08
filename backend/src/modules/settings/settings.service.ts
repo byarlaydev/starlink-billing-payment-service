@@ -70,7 +70,7 @@ export class SettingsService {
   }
 
   async getAll() {
-    const categories = ['ai', 'facebook', 'telegram', 'storage', 'general'];
+    const categories = ['ai', 'facebook', 'telegram', 'messenger', 'storage', 'general'];
     const result: Record<string, any[]> = {};
 
     for (const category of categories) {

@@ -39,3 +39,44 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ user: null, accessToken: null, refreshToken: null, isAuthenticated: false });
   },
 }));
+
+interface UiState {
+  sidebarCollapsed: boolean;
+  darkMode: boolean;
+  toggleSidebar: () => void;
+  setSidebarCollapsed: (v: boolean) => void;
+  toggleDarkMode: () => void;
+  setDarkMode: (v: boolean) => void;
+}
+
+export const useUiStore = create<UiState>((set) => ({
+  sidebarCollapsed: typeof window !== 'undefined' ? localStorage.getItem('sidebarCollapsed') === 'true' : false,
+  darkMode: typeof window !== 'undefined' ? localStorage.getItem('darkMode') === 'true' : false,
+  toggleSidebar: () => set((s) => {
+    const v = !s.sidebarCollapsed;
+    localStorage.setItem('sidebarCollapsed', String(v));
+    return { sidebarCollapsed: v };
+  }),
+  setSidebarCollapsed: (v) => {
+    localStorage.setItem('sidebarCollapsed', String(v));
+    set({ sidebarCollapsed: v });
+  },
+  toggleDarkMode: () => set((s) => {
+    const v = !s.darkMode;
+    localStorage.setItem('darkMode', String(v));
+    if (v) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    return { darkMode: v };
+  }),
+  setDarkMode: (v) => {
+    localStorage.setItem('darkMode', String(v));
+    if (v) document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+    set({ darkMode: v });
+  },
+}));
+
+// Initialize dark mode on load
+if (typeof window !== 'undefined' && localStorage.getItem('darkMode') === 'true') {
+  document.documentElement.classList.add('dark');
+}

@@ -15,7 +15,10 @@ import {
   Satellite,
   Globe,
   Bot,
+  X,
+  ChevronLeft,
 } from 'lucide-react';
+import { useUiStore } from '@/lib/store';
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, exact: true },
@@ -31,44 +34,76 @@ const navItems = [
   { href: '/dashboard/settings', label: 'Settings', icon: Settings },
 ];
 
-export function Sidebar({ currentPath }: { currentPath: string }) {
+export function Sidebar({ currentPath, isOpen, onClose }: { currentPath: string; isOpen: boolean; onClose: () => void }) {
+  const collapsed = useUiStore((s) => s.sidebarCollapsed);
+  const toggleSidebar = useUiStore((s) => s.toggleSidebar);
+
   return (
-    <aside className="w-64 bg-white border-r border-gray-200 flex flex-col">
-      <Link href="/dashboard" className="p-4 border-b border-gray-200 block">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-8 h-8 text-primary-600" />
-          <div>
-            <h1 className="font-bold text-gray-900 text-sm">Billing Assistance</h1>
-            <p className="text-xs text-gray-500">Admin Dashboard</p>
-          </div>
+    <>
+      {isOpen && (
+        <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={onClose} />
+      )}
+      <aside className={cn(
+        'fixed lg:static inset-y-0 left-0 z-50 bg-card border-r border-card flex flex-col transition-all duration-200 lg:translate-x-0',
+        collapsed ? 'w-16' : 'w-64',
+        isOpen ? 'translate-x-0' : '-translate-x-full',
+      )}>
+        <div className={cn('flex items-center p-4 border-b border-card', collapsed ? 'justify-center' : 'justify-between')}>
+          {collapsed ? (
+            <ShieldCheck className="w-7 h-7 text-primary-600 shrink-0" />
+          ) : (
+            <>
+              <Link href="/dashboard" className="flex items-center gap-2 min-w-0">
+                <ShieldCheck className="w-8 h-8 text-primary-600 shrink-0" />
+                <div className="min-w-0">
+                  <h1 className="font-bold text-foreground text-sm truncate">Billing Assistance</h1>
+                  <p className="text-xs text-foreground opacity-50 truncate">Admin Dashboard</p>
+                </div>
+              </Link>
+              <button onClick={onClose} className="p-1.5 hover:bg-card-hover rounded-lg lg:hidden shrink-0" aria-label="Close sidebar">
+                <X className="w-5 h-5" />
+              </button>
+            </>
+          )}
         </div>
-      </Link>
-      <nav className="flex-1 p-3 space-y-1">
-        {navItems.map((item) => {
-          const Icon = item.icon;
-          const isActive = item.exact ? currentPath === item.href : currentPath.startsWith(item.href);
-          return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
-                isActive
-                  ? 'bg-primary-50 text-primary-700'
-                  : 'text-gray-600 hover:bg-gray-100 hover:text-gray-900',
-              )}
-            >
-              <Icon className="w-5 h-5" />
-              {item.label}
-            </Link>
-          );
-        })}
-      </nav>
-      <div className="p-4 border-t border-gray-200">
-        <p className="text-xs text-gray-400 text-center">
-          Independent Third-Party Service
-        </p>
-      </div>
-    </aside>
+        <button
+          onClick={toggleSidebar}
+          className="hidden lg:flex items-center justify-center w-full py-2 border-b border-card text-foreground opacity-40 hover:text-foreground hover:bg-card-hover transition-colors"
+          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+        >
+          <ChevronLeft className={cn('w-4 h-4 transition-transform', collapsed && 'rotate-180')} />
+        </button>
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = item.exact ? currentPath === item.href : currentPath.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                onClick={onClose}
+                className={cn(
+                  'flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors',
+                  collapsed ? 'justify-center' : '',
+                  isActive
+                    ? 'bg-primary-50 text-primary-700'
+                    : 'text-foreground opacity-60 hover:bg-card-hover hover:text-foreground',
+                )}
+                title={collapsed ? item.label : undefined}
+              >
+                <Icon className="w-5 h-5 shrink-0" />
+                {!collapsed && item.label}
+              </Link>
+            );
+          })}
+        </nav>
+        <div className={cn('p-4 border-t border-card', collapsed && 'text-center')}>
+          <p className={cn('text-xs text-foreground opacity-40', collapsed ? 'hidden' : 'text-center')}>
+            Independent Third-Party Service
+          </p>
+        </div>
+      </aside>
+    </>
   );
 }

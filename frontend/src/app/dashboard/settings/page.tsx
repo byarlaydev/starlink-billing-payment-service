@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
-import { Save, Key, MessageSquare, Bot, HardDrive, Globe } from 'lucide-react';
+import { getErrorMessage } from '@/lib/error-utils';
+import { Save, Key, MessageSquare, Bot, HardDrive, Globe, Loader2, RefreshCw, Radio } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 
 interface SettingGroup {
@@ -34,6 +35,16 @@ const settingGroups: SettingGroup[] = [
       { key: 'page_access_token', label: 'Page Access Token', type: 'password' },
       { key: 'verify_token', label: 'Verify Token', type: 'password' },
       { key: 'app_secret', label: 'App Secret', type: 'password' },
+    ],
+  },
+  {
+    category: 'messenger',
+    label: 'Messenger Provider',
+    icon: Radio,
+    fields: [
+      { key: 'provider', label: 'Active Provider', type: 'select', description: 'Choose how to connect to Messenger' },
+      { key: 'invent_api_key', label: 'UseInvent API Key', type: 'password', description: 'API key from useinvent.com' },
+      { key: 'invent_org_id', label: 'UseInvent Org ID', type: 'text', description: 'Your organization ID in UseInvent' },
     ],
   },
   {
@@ -75,6 +86,8 @@ export default function SettingsPage() {
   const [editValues, setEditValues] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pollingStatus, setPollingStatus] = useState<any>(null);
+  const [restarting, setRestarting] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -90,7 +103,7 @@ export default function SettingsPage() {
         });
         setEditValues(values);
       } catch (err) {
-        console.error(err);
+        toast.error(getErrorMessage(err));
       } finally {
         setLoading(false);
       }
@@ -124,11 +137,33 @@ export default function SettingsPage() {
 
   const activeGroup = settingGroups.find(g => g.category === activeTab);
 
-  if (loading) return <div className="text-center py-12 text-gray-500">Loading settings...</div>;
+  useEffect(() => {
+    if (activeTab === 'messenger') {
+      api.get('/settings/messenger/polling/status')
+        .then(res => setPollingStatus(res.data.data))
+        .catch(() => {});
+    }
+  }, [activeTab]);
+
+  const handleRestartPolling = async () => {
+    setRestarting(true);
+    try {
+      await api.post('/settings/messenger/polling/restart');
+      toast.success('Polling service restarted');
+      const res = await api.get('/settings/messenger/polling/status');
+      setPollingStatus(res.data.data);
+    } catch {
+      toast.error('Failed to restart polling');
+    } finally {
+      setRestarting(false);
+    }
+  };
+
+  if (loading) return <div className="text-center py-12 text-foreground opacity-50">Loading settings...</div>;
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Settings</h1>
+      <h1 className="text-2xl font-bold text-foreground">Settings</h1>
 
       <div className="flex gap-6">
         <div className="w-56 space-y-1">
@@ -139,7 +174,7 @@ export default function SettingsPage() {
                 key={group.category}
                 onClick={() => setActiveTab(group.category)}
                 className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                  activeTab === group.category ? 'bg-primary-50 text-primary-700' : 'text-gray-600 hover:bg-gray-100'
+                  activeTab === group.category ? 'bg-primary-50 text-primary-700' : 'text-foreground opacity-60 hover:bg-card-hover'
                 }`}
               >
                 <Icon className="w-4 h-4" />
@@ -149,19 +184,19 @@ export default function SettingsPage() {
           })}
         </div>
 
-        <div className="flex-1 bg-white rounded-xl border border-gray-200 p-6">
+        <div className="flex-1 bg-card rounded-xl border border-card-border p-6">
           <h2 className="text-lg font-semibold mb-6">{activeGroup?.label}</h2>
 
           <div className="space-y-4">
             {activeGroup?.fields.map((field) => (
               <div key={field.key}>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{field.label}</label>
+                <label className="block text-sm font-medium text-foreground mb-1">{field.label}</label>
                 {field.type === 'textarea' ? (
                   <textarea
                     value={editValues[`${activeTab}:${field.key}`] || ''}
                     onChange={(e) => setEditValues({ ...editValues, [`${activeTab}:${field.key}`]: e.target.value })}
                     rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                   />
                 ) : field.type === 'select' ? (
                   <Select
@@ -172,6 +207,11 @@ export default function SettingsPage() {
                         ? [
                             { value: 'EN', label: 'English' },
                             { value: 'MY', label: 'Myanmar' },
+                          ]
+                        : field.key === 'provider'
+                        ? [
+                            { value: 'facebook', label: 'Facebook (Webhook)' },
+                            { value: 'invent', label: 'UseInvent (API Polling)' },
                           ]
                         : [
                             { value: 'true', label: 'Enabled' },
@@ -184,10 +224,10 @@ export default function SettingsPage() {
                     type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
                     value={editValues[`${activeTab}:${field.key}`] || ''}
                     onChange={(e) => setEditValues({ ...editValues, [`${activeTab}:${field.key}`]: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
                   />
                 )}
-                {field.description && <p className="text-xs text-gray-400 mt-1">{field.description}</p>}
+                {field.description && <p className="text-xs text-foreground opacity-40 mt-1">{field.description}</p>}
               </div>
             ))}
           </div>
@@ -198,10 +238,36 @@ export default function SettingsPage() {
               disabled={saving}
               className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50"
             >
-              <Save className="w-4 h-4" />
+              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               {saving ? 'Saving...' : 'Save Settings'}
             </button>
           </div>
+
+          {activeTab === 'messenger' && (
+            <div className="mt-6 pt-4 border-t border-card-border">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Polling Service Status</h3>
+              <div className="flex items-center justify-between p-3 bg-card-hover rounded-lg">
+                <div>
+                  <p className="text-sm text-foreground">
+                    Last poll: {pollingStatus?.lastPollTime
+                      ? new Date(pollingStatus.lastPollTime).toLocaleString()
+                      : 'Never (service inactive)'}
+                  </p>
+                  <p className="text-xs text-foreground opacity-50 mt-0.5">
+                    Polls every 10 seconds when provider is set to UseInvent
+                  </p>
+                </div>
+                <button
+                  onClick={handleRestartPolling}
+                  disabled={restarting}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 rounded-lg hover:bg-primary-100 disabled:opacity-50"
+                >
+                  {restarting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                  Restart
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

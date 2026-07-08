@@ -130,34 +130,34 @@ export function CurrencyDropdown({ value, onChange, className }: CurrencyDropdow
         type="button"
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-left',
+          'w-full px-3 py-2 border border-gray-300 dark:border-gray-600 dark:border-gray-600 rounded-lg bg-card text-left',
           'flex items-center justify-between gap-2',
           'focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent',
           'hover:border-gray-400 transition-colors',
           isOpen && 'ring-2 ring-primary-500 border-transparent'
         )}
       >
-        <span className="text-sm text-gray-900">
+        <span className="text-sm text-foreground">
           {selectedCurrency ? `${selectedCurrency.code} - ${selectedCurrency.name}` : 'Select currency'}
         </span>
         <ChevronDown
           className={cn(
-            'w-4 h-4 text-gray-400 transition-transform',
+            'w-4 h-4 text-foreground opacity-40 transition-transform',
             isOpen && 'rotate-180'
           )}
         />
       </button>
 
       {isOpen && (
-        <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg overflow-hidden">
-          <div className="p-2 border-b border-gray-200">
+        <div className="absolute z-50 mt-1 w-full bg-card border border-card rounded-lg shadow-lg overflow-hidden">
+          <div className="p-2 border-b border-card">
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search currency..."
-              className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+              className="w-full px-3 py-1.5 text-sm border border-gray-300 dark:border-gray-600 dark:border-gray-600 rounded-md focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
             />
           </div>
 
@@ -167,7 +167,7 @@ export function CurrencyDropdown({ value, onChange, className }: CurrencyDropdow
             role="listbox"
           >
             {filteredCurrencies.length === 0 ? (
-              <div className="px-3 py-4 text-sm text-gray-500 text-center">
+              <div className="px-3 py-4 text-sm text-foreground opacity-50 text-center">
                 No currencies found
               </div>
             ) : (
@@ -191,10 +191,10 @@ export function CurrencyDropdown({ value, onChange, className }: CurrencyDropdow
                   aria-selected={value === currency.code}
                 >
                   <div className="flex flex-col">
-                    <span className="text-sm font-medium text-gray-900">
+                    <span className="text-sm font-medium text-foreground">
                       {currency.code}
                     </span>
-                    <span className="text-xs text-gray-500">
+                    <span className="text-xs text-foreground opacity-50">
                       {currency.name}
                     </span>
                   </div>

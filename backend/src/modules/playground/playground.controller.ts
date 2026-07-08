@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, UseGuards, Logger } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Logger } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
@@ -15,13 +15,6 @@ export class PlaygroundController {
   private readonly logger = new Logger(PlaygroundController.name);
 
   constructor(private readonly aiService: AIService) {}
-
-  @Get('test')
-  @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)
-  @ApiOperation({ summary: 'Test endpoint to verify deploy' })
-  async test() {
-    return { message: 'deploy-4161c52', apiKeySet: !!process.env['GEMINI_API_KEY'], apiKeyPrefix: (process.env['GEMINI_API_KEY'] || '').substring(0, 5) };
-  }
 
   @Post('chat')
   @Roles(Role.SUPER_ADMIN, Role.ADMIN, Role.OPERATOR)

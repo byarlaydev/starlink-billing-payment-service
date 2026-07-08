@@ -13,6 +13,4 @@ pm2 logs --lines 20 --nostream
 
 echo "Starting Nginx..."
 nginx -t
-nginx -g 'daemon off;' &
-sleep 2
-tail -f /var/log/nginx/error.log /var/log/nginx/access.log
+exec nginx -g 'daemon off;'

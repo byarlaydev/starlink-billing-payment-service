@@ -8,8 +8,11 @@ cd /app
 
 echo "Starting backend and frontend with PM2..."
 pm2 start ecosystem.config.js
-pm2 logs --lines 10 --nostream
+sleep 3
+pm2 logs --lines 20 --nostream
 
 echo "Starting Nginx..."
 nginx -t
-exec nginx -g 'daemon off;'
+nginx -g 'daemon off;' &
+sleep 2
+tail -f /var/log/nginx/error.log /var/log/nginx/access.log

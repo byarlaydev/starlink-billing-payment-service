@@ -260,7 +260,7 @@ function RegionPlanModal({
     e.preventDefault();
     setSubmitting(true);
     try {
-      const submitData = {
+      const submitData: Record<string, any> = {
         ...formData,
         price: formData.price ? parseFloat(formData.price as string) : undefined,
       };
@@ -268,7 +268,8 @@ function RegionPlanModal({
         await api.put(`/region-plan/${regionPlan.id}`, submitData);
         toast.success('Region and plan updated');
       } else {
-        await api.post('/region-plan', submitData);
+        const { isActive, ...createData } = submitData;
+        await api.post('/region-plan', createData);
         toast.success('Region and plan created');
       }
       onRefresh();

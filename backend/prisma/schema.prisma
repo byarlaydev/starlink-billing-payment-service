@@ -1,0 +1,366 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// ENUMS
+// ============================================
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum BillingStatus {
+  PENDING
+  PROCESSING
+  APPROVED
+  COMPLETED
+  REJECTED
+  MANUAL_REVIEW
+}
+
+enum ConversationState {
+  IDLE
+  COLLECTING_INFO
+  AWAITING_PAYMENT_PROOF
+  PROCESSING_PAYMENT
+  COMPLETED
+  ESCALATED
+}
+
+enum PaymentMethod {
+  KBZPAY
+  WAVEPAY
+  AYA_PAY
+  CB_PAY
+  BANK_TRANSFER
+  CASH
+  OTHER
+}
+
+enum NotificationStatus {
+  PENDING
+  SENT
+  FAILED
+  RETRYING
+}
+
+enum OCRConfidence {
+  HIGH
+  MEDIUM
+  LOW
+  NONE
+}
+
+enum AuditAction {
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  ESCALATE
+  OVERRIDE
+  LOGIN
+  LOGOUT
+  EXPORT
+  SETTING_CHANGE
+}
+
+enum Language {
+  EN
+  MY
+}
+
+// ============================================
+// CUSTOMERS
+// ============================================
+
+model Customer {
+  id               String   @id @default(uuid())
+  messengerPsid    String   @unique
+  fullName         String?
+  facebookName     String?
+  contactNumber    String?
+  emailAddress     String?
+  starlinkEmail    String?
+  starlinkAccount  String?
+  preferredLang    Language @default(EN)
+  conversationState ConversationState @default(IDLE)
+  isActive         Boolean  @default(true)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  billingRequests  BillingRequest[]
+  conversations    MessengerConversation[]
+
+  @@index([messengerPsid])
+  @@index([emailAddress])
+  @@map("customers")
+}
+
+// ============================================
+// MESSENGER CONVERSATIONS
+// ============================================
+
+model MessengerConversation {
+  id            String   @id @default(uuid())
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  direction     String   // "inbound" or "outbound"
+  messageType   String   // "text", "image", "file", "quick_reply", "postback"
+  content       String   @db.Text
+  attachmentUrl String?
+  metadata      Json?
+  processedByAI Boolean  @default(false)
+  aiResponseId  String?
+  createdAt     DateTime @default(now())
+
+  @@index([customerId])
+  @@index([createdAt])
+  @@map("messenger_conversations")
+}
+
+// ============================================
+// BILLING REQUESTS
+// ============================================
+
+model BillingRequest {
+  id                  String        @id @default(uuid())
+  requestId           String        @unique
+  customerId          String
+  customer            Customer      @relation(fields: [customerId], references: [id])
+  fullName            String
+  facebookName        String?
+  contactNumber       String?
+  emailAddress        String?
+  starlinkEmail       String?
+  starlinkAccount     String?
+  billingAmount       Decimal       @db.Decimal(12, 2)
+  billingMonth        String
+  preferredPayment    PaymentMethod?
+  additionalNotes     String?       @db.Text
+  status              BillingStatus @default(PENDING)
+  assignedTo          String?
+  priority            Int           @default(0)
+  idempotencyKey      String?       @unique
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+  resolvedAt          DateTime?
+
+  paymentProofs       PaymentProof[]
+  activityLogs        ActivityLog[]
+  notifications       TelegramNotification[]
+
+  @@index([customerId])
+  @@index([status])
+  @@index([billingMonth])
+  @@index([requestId])
+  @@map("billing_requests")
+}
+
+// ============================================
+// PAYMENT PROOFS
+// ============================================
+
+model PaymentProof {
+  id                String         @id @default(uuid())
+  billingRequestId  String
+  billingRequest    BillingRequest @relation(fields: [billingRequestId], references: [id])
+  originalFilename  String
+  storedFilename    String         @unique
+  filePath          String
+  fileSize          Int
+  mimeType          String
+  checksum          String?
+  virusScanStatus   String?        @default("pending")
+  uploadedAt        DateTime       @default(now())
+
+  ocrResults        OCRResult[]
+
+  @@index([billingRequestId])
+  @@map("payment_proofs")
+}
+
+// ============================================
+// OCR RESULTS
+// ============================================
+
+model OCRResult {
+  id                String       @id @default(uuid())
+  paymentProofId    String
+  paymentProof      PaymentProof @relation(fields: [paymentProofId], references: [id])
+  transactionId     String?
+  paymentDate       String?
+  paymentTime       String?
+  amountPaid        Decimal?     @db.Decimal(12, 2)
+  paymentMethod     String?
+  senderName        String?
+  receiverName      String?
+  bankWalletName    String?
+  confidenceScore   Float        @default(0)
+  confidenceLevel   OCRConfidence @default(NONE)
+  rawText           String?      @db.Text
+  aiModel           String
+  aiRawResponse     String?      @db.Text
+  needsManualReview Boolean      @default(false)
+  processedAt       DateTime     @default(now())
+
+  aiResponses       AIResponse[]
+
+  @@index([paymentProofId])
+  @@map("ocr_results")
+}
+
+// ============================================
+// AI RESPONSES
+// ============================================
+
+model AIResponse {
+  id              String   @id @default(uuid())
+  ocrResultId     String?
+  ocrResult       OCRResult? @relation(fields: [ocrResultId], references: [id])
+  conversationId  String?
+  promptUsed      String   @db.Text
+  responseText    String   @db.Text
+  modelUsed       String
+  tokensUsed      Int?
+  latencyMs       Int?
+  confidenceScore Float?
+  metadata        Json?
+  createdAt       DateTime @default(now())
+
+  @@index([conversationId])
+  @@index([createdAt])
+  @@map("ai_responses")
+}
+
+// ============================================
+// TELEGRAM NOTIFICATIONS
+// ============================================
+
+model TelegramNotification {
+  id                String           @id @default(uuid())
+  billingRequestId  String
+  billingRequest    BillingRequest   @relation(fields: [billingRequestId], references: [id])
+  chatId            String
+  messageType       String
+  messagePayload    Json?
+  telegramMessageId Int?
+  status            NotificationStatus @default(PENDING)
+  retryCount        Int              @default(0)
+  sentAt            DateTime?
+  errorMessage      String?
+  createdAt         DateTime         @default(now())
+
+  @@index([billingRequestId])
+  @@index([status])
+  @@map("telegram_notifications")
+}
+
+// ============================================
+// SETTINGS
+// ============================================
+
+model Setting {
+  id          String   @id @default(uuid())
+  category    String
+  key         String
+  value       String   @db.Text
+  isEncrypted Boolean  @default(false)
+  isPublic    Boolean  @default(false)
+  description String?  @db.Text
+  updatedAt   DateTime @updatedAt
+  updatedBy   String?
+
+  @@unique([category, key])
+  @@index([category])
+  @@map("settings")
+}
+
+// ============================================
+// ADMIN USERS
+// ============================================
+
+model AdminUser {
+  id             String   @id @default(uuid())
+  email          String   @unique
+  passwordHash   String
+  fullName       String
+  role           Role     @default(ADMIN)
+  isActive       Boolean  @default(true)
+  lastLoginAt    DateTime?
+  loginAttempts  Int      @default(0)
+  lockedUntil    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("admin_users")
+}
+
+// ============================================
+// ACTIVITY LOGS (AUDIT TRAIL)
+// ============================================
+
+model ActivityLog {
+  id              String      @id @default(uuid())
+  billingRequestId String?
+  billingRequest  BillingRequest? @relation(fields: [billingRequestId], references: [id])
+  actorId         String?
+  actorType       String      // "admin", "system", "ai", "customer"
+  action          AuditAction
+  description     String      @db.Text
+  metadata        Json?
+  ipAddress       String?
+  userAgent       String?
+  createdAt       DateTime    @default(now())
+
+  @@index([billingRequestId])
+  @@index([actorId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("activity_logs")
+}
+
+// ============================================
+// PROMPT VERSIONS
+// ============================================
+
+model PromptVersion {
+  id          String   @id @default(uuid())
+  name        String
+  version     String
+  content     String   @db.Text
+  isActive    Boolean  @default(false)
+  description String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([name, version])
+  @@map("prompt_versions")
+}
+
+// ============================================
+// WEBHOOK EVENTS (Idempotency)
+// ============================================
+
+model WebhookEvent {
+  id          String   @id @default(uuid())
+  eventId     String   @unique
+  source      String   // "messenger", "telegram"
+  payload     Json
+  processed   Boolean  @default(false)
+  processedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([eventId])
+  @@index([source, processed])
+  @@map("webhook_events")
+}

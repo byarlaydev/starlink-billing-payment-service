@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: 'backend',
-      script: './backend/dist/main.js',
+      script: './dist/main.js',
       cwd: '/app/backend',
       instances: 1,
       autorestart: true,
@@ -15,7 +15,7 @@ module.exports = {
     },
     {
       name: 'frontend',
-      script: './frontend/standalone/server.js',
+      script: './server.js',
       cwd: '/app/frontend/standalone',
       instances: 1,
       autorestart: true,

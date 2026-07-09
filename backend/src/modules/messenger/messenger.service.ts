@@ -143,6 +143,12 @@ export class MessengerService {
     const context = await this.loadFullCustomerContext(psid, psid, 'invent');
     const customer = context.customer;
 
+    await this.customersService.addConversation(customer.id, {
+      direction: 'inbound',
+      messageType: 'text',
+      content: text,
+    });
+
     if (customer.isAdminTakeover) {
       this.logger.log(`Invent message from ${psid} queued for admin (takeover active)`);
       return;

@@ -1,8 +1,8 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import { ModuleRef } from '@nestjs/core';
 import { PrismaService } from '../config/prisma.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { InventMessagingProvider } from './providers/invent.provider';
-import { MessengerService } from '../modules/messenger/messenger.service';
 
 @Injectable()
 export class InventPollingService implements OnModuleInit, OnModuleDestroy {
@@ -15,8 +15,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly settingsService: SettingsService,
     private readonly inventProvider: InventMessagingProvider,
-    @Inject(forwardRef(() => MessengerService))
-    private readonly messengerService: MessengerService,
+    private readonly moduleRef: ModuleRef,
   ) {}
 
   async onModuleInit() {
@@ -144,7 +143,9 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
       });
 
       try {
-        await this.messengerService.handleInventInbound(psid, text);
+        const { MessengerService } = await import('../modules/messenger/messenger.service');
+        const messengerService = this.moduleRef.get(MessengerService, { strict: false });
+        await messengerService.handleInventInbound(psid, text);
 
         await this.prisma.webhookEvent.update({
           where: { eventId: `invent_${messageId}` },

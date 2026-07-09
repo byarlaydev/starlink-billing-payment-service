@@ -123,11 +123,11 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
       new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
 
     const textMessages = newMessages
-      .filter((m: any) => m.role === 'user' && this.extractMessageText(m))
+      .filter((m: any) => this.hasUserRole(m) && this.extractMessageText(m))
       .sort(byCreation);
 
     const nonTextMessages = newMessages
-      .filter((m: any) => m.role === 'user' && !this.extractMessageText(m));
+      .filter((m: any) => this.hasUserRole(m) && !this.extractMessageText(m));
 
     // Mark all non-text messages as processed so they don't keep showing as new
     for (const msg of nonTextMessages) {
@@ -255,12 +255,20 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     return null;
   }
 
-  private async filterUnprocessedMessages(messages: any[]): Promise<any[]> {
-    const messageIds = messages
-      .filter((m: any) => m.role === 'user')
-      .map((m: any) => `invent_${m.id}`);
+  private hasUserRole(msg: any): boolean {
+    if (msg.role === 'user') return true;
+    if (msg.messages && Array.isArray(msg.messages)) {
+      return msg.messages.some((m: any) => m.role === 'user');
+    }
+    return false;
+  }
 
-    if (messageIds.length === 0) return [];
+  private async filterUnprocessedMessages(messages: any[]): Promise<any[]> {
+    // Only consider user messages
+    const userMessages = messages.filter((m: any) => this.hasUserRole(m));
+    if (userMessages.length === 0) return [];
+
+    const messageIds = userMessages.map((m: any) => `invent_${m.id}`);
 
     const processed = await this.prisma.webhookEvent.findMany({
       where: { eventId: { in: messageIds } },
@@ -268,7 +276,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     });
 
     const processedSet = new Set(processed.map(p => p.eventId));
-    return messages.filter((m: any) => !processedSet.has(`invent_${m.id}`));
+    return userMessages.filter((m: any) => !processedSet.has(`invent_${m.id}`));
   }
 
   getLastPollTime(): Date | null {

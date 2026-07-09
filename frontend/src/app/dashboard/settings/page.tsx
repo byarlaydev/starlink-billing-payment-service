@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
-import { Save, Key, MessageSquare, Bot, HardDrive, Globe, Loader2, RefreshCw, Radio } from 'lucide-react';
+import { Save, Key, MessageSquare, Bot, HardDrive, Globe, Loader2, RefreshCw, CheckCircle2, Circle } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 
 interface SettingGroup {
@@ -28,24 +28,10 @@ const settingGroups: SettingGroup[] = [
     ],
   },
   {
-    category: 'facebook',
-    label: 'Facebook Settings',
-    icon: MessageSquare,
-    fields: [
-      { key: 'page_access_token', label: 'Page Access Token', type: 'password' },
-      { key: 'verify_token', label: 'Verify Token', type: 'password' },
-      { key: 'app_secret', label: 'App Secret', type: 'password' },
-    ],
-  },
-  {
     category: 'messenger',
-    label: 'Messenger Provider',
-    icon: Radio,
-    fields: [
-      { key: 'provider', label: 'Active Provider', type: 'select', description: 'Choose how to connect to Messenger' },
-      { key: 'invent_api_key', label: 'UseInvent API Key', type: 'password', description: 'API key from useinvent.com' },
-      { key: 'invent_org_id', label: 'UseInvent Org ID', type: 'text', description: 'Your organization ID in UseInvent' },
-    ],
+    label: 'Messenger',
+    icon: MessageSquare,
+    fields: [],
   },
   {
     category: 'telegram',
@@ -78,6 +64,17 @@ const settingGroups: SettingGroup[] = [
       { key: 'language', label: 'Default Language', type: 'select' },
     ],
   },
+];
+
+const facebookFields = [
+  { key: 'page_access_token', label: 'Page Access Token', type: 'password', description: 'Long-lived token from Facebook Graph API Explorer' },
+  { key: 'verify_token', label: 'Verify Token', type: 'password', description: 'Custom token you set in Facebook webhook config' },
+  { key: 'app_secret', label: 'App Secret', type: 'password', description: 'From your Facebook App settings' },
+];
+
+const inventFields = [
+  { key: 'invent_api_key', label: 'API Key', type: 'password', description: 'Generate at useinvent.com/o/settings/api-keys' },
+  { key: 'invent_org_id', label: 'Organization ID', type: 'text', description: 'Use "c" for your main org, or the sub-org ID' },
 ];
 
 export default function SettingsPage() {
@@ -114,20 +111,45 @@ export default function SettingsPage() {
   const handleSave = async () => {
     setSaving(true);
     try {
-      const group = settingGroups.find(g => g.category === activeTab);
-      if (!group) return;
-      const updates: Record<string, string> = {};
-      group.fields.forEach(f => {
-        const val = editValues[`${activeTab}:${f.key}`];
-        if (val !== undefined) {
-          const isMasked = /^[•*\u2022]+$/.test(val);
-          if (!isMasked) {
+      if (activeTab === 'messenger') {
+        const messengerUpdates: Record<string, string> = {};
+        const providerVal = editValues['messenger:provider'];
+        if (providerVal !== undefined && !/^[•*\u2022]+$/.test(providerVal)) {
+          messengerUpdates.provider = providerVal;
+        }
+        inventFields.forEach(f => {
+          const val = editValues[`messenger:${f.key}`];
+          if (val !== undefined && !/^[•*\u2022]+$/.test(val)) {
+            messengerUpdates[f.key] = val;
+          }
+        });
+        await api.put('/settings/messenger', messengerUpdates);
+
+        const fbUpdates: Record<string, string> = {};
+        facebookFields.forEach(f => {
+          const val = editValues[`facebook:${f.key}`];
+          if (val !== undefined && !/^[•*\u2022]+$/.test(val)) {
+            fbUpdates[f.key] = val;
+          }
+        });
+        if (Object.keys(fbUpdates).length > 0) {
+          await api.put('/settings/facebook', fbUpdates);
+        }
+
+        toast.success('Messenger settings saved');
+      } else {
+        const group = settingGroups.find(g => g.category === activeTab);
+        if (!group) return;
+        const updates: Record<string, string> = {};
+        group.fields.forEach(f => {
+          const val = editValues[`${activeTab}:${f.key}`];
+          if (val !== undefined && !/^[•*\u2022]+$/.test(val)) {
             updates[f.key] = val;
           }
-        }
-      });
-      await api.put(`/settings/${activeTab}`, updates);
-      toast.success('Settings saved successfully');
+        });
+        await api.put(`/settings/${activeTab}`, updates);
+        toast.success('Settings saved successfully');
+      }
     } catch {
       toast.error('Failed to save settings');
     } finally {
@@ -136,6 +158,7 @@ export default function SettingsPage() {
   };
 
   const activeGroup = settingGroups.find(g => g.category === activeTab);
+  const activeProvider = editValues['messenger:provider'] || 'facebook';
 
   useEffect(() => {
     if (activeTab === 'messenger') {
@@ -158,6 +181,38 @@ export default function SettingsPage() {
       setRestarting(false);
     }
   };
+
+  const renderField = (field: { key: string; label: string; type: string; description?: string }, category: string) => (
+    <div key={`${category}:${field.key}`}>
+      <label className="block text-sm font-medium text-foreground mb-1">{field.label}</label>
+      {field.type === 'textarea' ? (
+        <textarea
+          value={editValues[`${category}:${field.key}`] || ''}
+          onChange={(e) => setEditValues({ ...editValues, [`${category}:${field.key}`]: e.target.value })}
+          rows={4}
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+        />
+      ) : field.type === 'select' ? (
+        <Select
+          value={editValues[`${category}:${field.key}`] || ''}
+          onChange={(value) => setEditValues({ ...editValues, [`${category}:${field.key}`]: value })}
+          options={
+            field.key === 'language'
+              ? [{ value: 'EN', label: 'English' }, { value: 'MY', label: 'Myanmar' }]
+              : [{ value: 'true', label: 'Enabled' }, { value: 'false', label: 'Disabled' }]
+          }
+        />
+      ) : (
+        <input
+          type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
+          value={editValues[`${category}:${field.key}`] || ''}
+          onChange={(e) => setEditValues({ ...editValues, [`${category}:${field.key}`]: e.target.value })}
+          className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+        />
+      )}
+      {field.description && <p className="text-xs text-foreground opacity-40 mt-1">{field.description}</p>}
+    </div>
+  );
 
   if (loading) return <div className="text-center py-12 text-foreground opacity-50">Loading settings...</div>;
 
@@ -185,88 +240,129 @@ export default function SettingsPage() {
         </div>
 
         <div className="flex-1 bg-card rounded-xl border border-card-border p-6">
-          <h2 className="text-lg font-semibold mb-6">{activeGroup?.label}</h2>
-
-          <div className="space-y-4">
-            {activeGroup?.fields.map((field) => (
-              <div key={field.key}>
-                <label className="block text-sm font-medium text-foreground mb-1">{field.label}</label>
-                {field.type === 'textarea' ? (
-                  <textarea
-                    value={editValues[`${activeTab}:${field.key}`] || ''}
-                    onChange={(e) => setEditValues({ ...editValues, [`${activeTab}:${field.key}`]: e.target.value })}
-                    rows={4}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  />
-                ) : field.type === 'select' ? (
-                  <Select
-                    value={editValues[`${activeTab}:${field.key}`] || ''}
-                    onChange={(value) => setEditValues({ ...editValues, [`${activeTab}:${field.key}`]: value })}
-                    options={
-                      field.key === 'language'
-                        ? [
-                            { value: 'EN', label: 'English' },
-                            { value: 'MY', label: 'Myanmar' },
-                          ]
-                        : field.key === 'provider'
-                        ? [
-                            { value: 'facebook', label: 'Facebook (Webhook)' },
-                            { value: 'invent', label: 'UseInvent (API Polling)' },
-                          ]
-                        : [
-                            { value: 'true', label: 'Enabled' },
-                            { value: 'false', label: 'Disabled' },
-                          ]
-                    }
-                  />
-                ) : (
-                  <input
-                    type={field.type === 'password' ? 'password' : field.type === 'number' ? 'number' : 'text'}
-                    value={editValues[`${activeTab}:${field.key}`] || ''}
-                    onChange={(e) => setEditValues({ ...editValues, [`${activeTab}:${field.key}`]: e.target.value })}
-                    className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
-                  />
-                )}
-                {field.description && <p className="text-xs text-foreground opacity-40 mt-1">{field.description}</p>}
+          {activeTab === 'messenger' ? (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-lg font-semibold text-foreground">Messenger</h2>
+                <p className="text-sm text-foreground opacity-50 mt-1">Connect to Facebook Messenger via webhook or UseInvent API polling</p>
               </div>
-            ))}
-          </div>
 
-          <div className="mt-6 pt-4 border-t">
-            <button
-              onClick={handleSave}
-              disabled={saving}
-              className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50"
-            >
-              {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-              {saving ? 'Saving...' : 'Save Settings'}
-            </button>
-          </div>
+              <div>
+                <label className="block text-sm font-medium text-foreground mb-3">Connection Method</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => setEditValues({ ...editValues, 'messenger:provider': 'facebook' })}
+                    className={`relative flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left ${
+                      activeProvider === 'facebook'
+                        ? 'border-primary-500 bg-primary-50/50'
+                        : 'border-card-border hover:border-primary-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      {activeProvider === 'facebook'
+                        ? <CheckCircle2 className="w-5 h-5 text-primary-600" />
+                        : <Circle className="w-5 h-5 text-foreground opacity-30" />}
+                      <span className="text-sm font-semibold text-foreground">Facebook Webhook</span>
+                    </div>
+                    <p className="text-xs text-foreground opacity-50">
+                      Receive messages in real-time via Facebook webhook. Requires a public URL and Facebook App setup.
+                    </p>
+                  </button>
 
-          {activeTab === 'messenger' && (
-            <div className="mt-6 pt-4 border-t border-card-border">
-              <h3 className="text-sm font-semibold text-foreground mb-3">Polling Service Status</h3>
-              <div className="flex items-center justify-between p-3 bg-card-hover rounded-lg">
-                <div>
-                  <p className="text-sm text-foreground">
-                    Last poll: {pollingStatus?.lastPollTime
-                      ? new Date(pollingStatus.lastPollTime).toLocaleString()
-                      : 'Never (service inactive)'}
-                  </p>
-                  <p className="text-xs text-foreground opacity-50 mt-0.5">
-                    Polls every 10 seconds when provider is set to UseInvent
-                  </p>
+                  <button
+                    onClick={() => setEditValues({ ...editValues, 'messenger:provider': 'invent' })}
+                    className={`relative flex flex-col items-start p-4 rounded-xl border-2 transition-all text-left ${
+                      activeProvider === 'invent'
+                        ? 'border-primary-500 bg-primary-50/50'
+                        : 'border-card-border hover:border-primary-300'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      {activeProvider === 'invent'
+                        ? <CheckCircle2 className="w-5 h-5 text-primary-600" />
+                        : <Circle className="w-5 h-5 text-foreground opacity-30" />}
+                      <span className="text-sm font-semibold text-foreground">UseInvent API</span>
+                    </div>
+                    <p className="text-xs text-foreground opacity-50">
+                      Poll messages from UseInvent every 10 seconds. No webhook needed — just an API key.
+                    </p>
+                  </button>
                 </div>
+              </div>
+
+              {activeProvider === 'facebook' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-card-border" />
+                    <span className="text-xs font-medium text-foreground opacity-40 uppercase tracking-wide">Facebook Credentials</span>
+                    <div className="h-px flex-1 bg-card-border" />
+                  </div>
+                  {facebookFields.map(f => renderField(f, 'facebook'))}
+                </div>
+              )}
+
+              {activeProvider === 'invent' && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <div className="h-px flex-1 bg-card-border" />
+                    <span className="text-xs font-medium text-foreground opacity-40 uppercase tracking-wide">UseInvent Credentials</span>
+                    <div className="h-px flex-1 bg-card-border" />
+                  </div>
+                  {inventFields.map(f => renderField(f, 'messenger'))}
+
+                  <div className="mt-4 p-4 bg-card-hover rounded-xl">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Polling Service</p>
+                        <p className="text-xs text-foreground opacity-50 mt-0.5">
+                          Last poll: {pollingStatus?.lastPollTime
+                            ? new Date(pollingStatus.lastPollTime).toLocaleString()
+                            : 'Not started yet'}
+                        </p>
+                      </div>
+                      <button
+                        onClick={handleRestartPolling}
+                        disabled={restarting}
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 rounded-lg hover:bg-primary-100 disabled:opacity-50 transition-colors"
+                      >
+                        {restarting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+                        Restart
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="pt-4 border-t border-card-border">
                 <button
-                  onClick={handleRestartPolling}
-                  disabled={restarting}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 rounded-lg hover:bg-primary-100 disabled:opacity-50"
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50"
                 >
-                  {restarting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-                  Restart
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {saving ? 'Saving...' : 'Save Settings'}
                 </button>
               </div>
             </div>
+          ) : (
+            <>
+              <h2 className="text-lg font-semibold mb-6">{activeGroup?.label}</h2>
+
+              <div className="space-y-4">
+                {activeGroup?.fields.map((field) => renderField(field, activeTab))}
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-card-border">
+                <button
+                  onClick={handleSave}
+                  disabled={saving}
+                  className="flex items-center gap-2 px-4 py-2 bg-primary-600 text-white rounded-lg font-medium hover:bg-primary-700 disabled:opacity-50"
+                >
+                  {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                  {saving ? 'Saving...' : 'Save Settings'}
+                </button>
+              </div>
+            </>
           )}
         </div>
       </div>

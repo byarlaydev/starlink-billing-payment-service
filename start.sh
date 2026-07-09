@@ -3,7 +3,7 @@ set -e
 
 echo "Syncing database schema..."
 cd /app/backend
-npx prisma db push
+npx prisma db push --accept-data-loss
 
 echo "Seeding database..."
 npx prisma db seed

@@ -119,18 +119,44 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
 
     if (newMessages.length === 0) return;
 
-    const userMessages = newMessages
+    const byCreation = (a: any, b: any) =>
+      new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
+
+    const textMessages = newMessages
       .filter((m: any) => m.role === 'user' && this.extractMessageText(m))
-      .sort((a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+      .sort(byCreation);
 
-    if (userMessages.length === 0) return;
+    const nonTextMessages = newMessages
+      .filter((m: any) => m.role === 'user' && !this.extractMessageText(m));
 
-    // Only process the most recent user message — skip historical ones
+    // Mark all non-text messages as processed so they don't keep showing as new
+    for (const msg of nonTextMessages) {
+      try {
+        await this.prisma.webhookEvent.create({
+          data: {
+            eventId: `invent_${msg.id}`,
+            source: 'invent',
+            payload: { chatId, messageId: msg.id, senderPsid: psid, customerId: customer.id },
+            processed: true,
+          },
+        });
+      } catch {
+        // ignore duplicate key errors
+      }
+    }
+
+    if (nonTextMessages.length > 0) {
+      this.logger.log(`Marked ${nonTextMessages.length} non-text messages as processed for chat ${chatId}`);
+    }
+
+    if (textMessages.length === 0) return;
+
+    // Only process the most recent text message — skip historical ones
     // to avoid flooding the user with responses to every past message
-    const latestMsg = userMessages[userMessages.length - 1];
-    const skippedCount = userMessages.length - 1;
+    const latestMsg = textMessages[textMessages.length - 1];
+    const skippedCount = textMessages.length - 1;
 
-    for (const msg of userMessages.slice(0, skippedCount)) {
+    for (const msg of textMessages.slice(0, skippedCount)) {
       const text = this.extractMessageText(msg);
       try {
         await this.prisma.webhookEvent.create({
@@ -147,7 +173,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     }
 
     if (skippedCount > 0) {
-      this.logger.log(`Skipped ${skippedCount} historical messages for chat ${chatId}, processing only the most recent`);
+      this.logger.log(`Skipped ${skippedCount} historical text messages for chat ${chatId}, processing only the most recent`);
     }
 
     const text = this.extractMessageText(latestMsg);

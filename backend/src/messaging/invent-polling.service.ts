@@ -118,8 +118,8 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     this.logger.debug(`Chat ${chatId}: ${newMessages.length} new messages`);
 
     if (newMessages.length > 0) {
-      const sample = JSON.stringify(newMessages[0]).substring(0, 500);
-      this.logger.debug(`Chat ${chatId}: first new message keys=${Object.keys(newMessages[0]).join(',')}, structure=${sample}`);
+      const sample = JSON.stringify(newMessages[0]).substring(0, 800);
+      this.logger.warn(`Chat ${chatId}: FULL first new msg keys=${Object.keys(newMessages[0]).join(',')}, structure=${sample}`);
     }
 
     if (newMessages.length === 0) return;

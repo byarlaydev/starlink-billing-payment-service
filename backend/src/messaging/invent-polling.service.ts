@@ -102,6 +102,9 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
           preferredLang: contactChannel.language === 'my' ? 'MY' : 'EN',
         },
       });
+      await this.prisma.conversationContext.create({
+        data: { customerId: customer.id },
+      });
       this.logger.log(`Created new customer from Invent: ${psid}`);
     } else if (!customer.inventChatId) {
       await this.prisma.customer.update({
@@ -175,15 +178,27 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
   }
 
   private extractMessageText(msg: any): string | null {
-    const content = msg.message || msg.messages || msg.content;
-    if (!content) return null;
+    if (!msg.messages || !Array.isArray(msg.messages)) {
+      // fallback: check top-level message/content fields
+      const content = msg.message || msg.content;
+      if (!content) return null;
+      const parts = Array.isArray(content) ? content : [content];
+      for (const part of parts) {
+        if (typeof part === 'string') return part;
+        if (part.type === 'text' && part.text) return part.text;
+        if (part.text) return part.text;
+      }
+      return null;
+    }
 
-    const parts = Array.isArray(content) ? content : [content];
-
-    for (const part of parts) {
-      if (typeof part === 'string') return part;
-      if (part.type === 'text' && part.text) return part.text;
-      if (part.text) return part.text;
+    for (const m of msg.messages) {
+      if (m.role !== 'user') continue;
+      if (!m.parts || !Array.isArray(m.parts)) continue;
+      for (const part of m.parts) {
+        if (part.type === 'text' && part.text) {
+          return part.text;
+        }
+      }
     }
     return null;
   }

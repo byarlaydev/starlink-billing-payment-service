@@ -59,10 +59,13 @@ export class InventMessagingProvider implements MessagingProvider {
       });
 
       if (!response.ok) {
-        this.logger.error(`Failed to send Invent message: ${response.status} ${await response.text()}`);
+        const errorBody = await response.text();
+        this.logger.error(`Failed to send Invent message to chat ${chatId}: ${response.status} ${errorBody}`);
+      } else {
+        this.logger.debug(`Sent message to Invent chat ${chatId}: "${text.substring(0, 60)}..."`);
       }
     } catch (error) {
-      this.logger.error('Error sending Invent message', error);
+      this.logger.error(`Error sending Invent message to chat ${chatId}`, error);
     }
   }
 

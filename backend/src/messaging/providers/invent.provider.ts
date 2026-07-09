@@ -93,7 +93,11 @@ export class InventMessagingProvider implements MessagingProvider {
         return [];
       }
 
-      return response.json();
+      const body = await response.json();
+      if (Array.isArray(body)) return body;
+      if (body.data && Array.isArray(body.data)) return body.data;
+      this.logger.warn(`Unexpected inbox response format: ${typeof body}`);
+      return [];
     } catch (error) {
       this.logger.error('Error fetching Invent inbox', error);
       return [];
@@ -120,7 +124,11 @@ export class InventMessagingProvider implements MessagingProvider {
         return [];
       }
 
-      return response.json();
+      const body = await response.json();
+      if (Array.isArray(body)) return body;
+      if (body.data && Array.isArray(body.data)) return body.data;
+      this.logger.warn(`Unexpected messages response format for chat ${chatId}`);
+      return [];
     } catch (error) {
       this.logger.error('Error fetching Invent messages', error);
       return [];

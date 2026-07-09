@@ -1,8 +1,8 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
-import { ModuleRef } from '@nestjs/core';
+import { Injectable, Logger, OnModuleInit, OnModuleDestroy, Inject, forwardRef } from '@nestjs/common';
 import { PrismaService } from '../config/prisma.service';
 import { SettingsService } from '../modules/settings/settings.service';
 import { InventMessagingProvider } from './providers/invent.provider';
+import { MessengerService } from '../modules/messenger/messenger.service';
 
 @Injectable()
 export class InventPollingService implements OnModuleInit, OnModuleDestroy {
@@ -15,7 +15,8 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     private readonly prisma: PrismaService,
     private readonly settingsService: SettingsService,
     private readonly inventProvider: InventMessagingProvider,
-    private readonly moduleRef: ModuleRef,
+    @Inject(forwardRef(() => MessengerService))
+    private readonly messengerService: MessengerService,
   ) {}
 
   async onModuleInit() {
@@ -60,6 +61,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
 
     try {
       const chats = await this.inventProvider.fetchInboxChats();
+      this.logger.debug(`Polled Invent inbox: ${chats.length} chats`);
 
       for (const chat of chats) {
         await this.processChat(chat);
@@ -109,13 +111,18 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     }
 
     const messages = await this.inventProvider.fetchChatMessages(chatId);
+    this.logger.debug(`Chat ${chatId}: ${messages.length} messages fetched`);
     const newMessages = await this.filterUnprocessedMessages(messages);
+    this.logger.debug(`Chat ${chatId}: ${newMessages.length} new messages`);
 
     for (const msg of newMessages) {
       if (msg.role !== 'user') continue;
 
       const text = this.extractMessageText(msg);
-      if (!text) continue;
+      if (!text) {
+        this.logger.warn(`Chat ${chatId}: could not extract text from message ${msg.id}, structure: ${JSON.stringify(msg).substring(0, 200)}`);
+        continue;
+      }
 
       const messageId = msg.id;
 
@@ -134,9 +141,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
       });
 
       try {
-        const { MessengerService } = await import('../modules/messenger/messenger.service');
-        const messengerService = this.moduleRef.get(MessengerService, { strict: false });
-        await messengerService.handleInventInbound(psid, text);
+        await this.messengerService.handleInventInbound(psid, text);
 
         await this.prisma.webhookEvent.update({
           where: { eventId: `invent_${messageId}` },
@@ -155,27 +160,30 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
   }
 
   private extractContactChannel(chat: any): any {
-    if (!chat.members || !Array.isArray(chat.members)) return null;
+    if (!chat.members || !Array.isArray(chat.members)) {
+      this.logger.debug(`Chat ${chat.id}: no members array`);
+      return null;
+    }
 
     for (const member of chat.members) {
       if (member.role === 'MEMBER' && member.contact_channel) {
         return member.contact_channel;
       }
     }
+    this.logger.debug(`Chat ${chat.id}: no MEMBER with contact_channel found, members: ${JSON.stringify(chat.members.map((m: any) => ({ role: m.role, hasChannel: !!m.contact_channel })))}`);
     return null;
   }
 
   private extractMessageText(msg: any): string | null {
-    if (!msg.messages || !Array.isArray(msg.messages)) return null;
+    const content = msg.message || msg.messages || msg.content;
+    if (!content) return null;
 
-    for (const m of msg.messages) {
-      if (m.role === 'user' && m.parts && Array.isArray(m.parts)) {
-        for (const part of m.parts) {
-          if (part.type === 'text' && part.text) {
-            return part.text;
-          }
-        }
-      }
+    const parts = Array.isArray(content) ? content : [content];
+
+    for (const part of parts) {
+      if (typeof part === 'string') return part;
+      if (part.type === 'text' && part.text) return part.text;
+      if (part.text) return part.text;
     }
     return null;
   }

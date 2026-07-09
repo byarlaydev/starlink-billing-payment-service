@@ -175,11 +175,14 @@ export class MessengerService {
       lastActiveAt: new Date(),
     });
 
+    this.logger.log(`Invent: starting AI processing for ${psid}: "${text.substring(0, 50)}"`);
+
     try {
       const intent = await this.aiService.detectIntent(text, recentContext);
+      this.logger.log(`Invent: intent detected for ${psid}: ${intent.intent}`);
       await this.processIntent(customer, text, intent, context);
     } catch (error) {
-      this.logger.error('AI processing failed for Invent message', error);
+      this.logger.error(`Invent: AI processing failed for ${psid}`, error);
       await this.messagingService.sendMessage(psid,
         "Sorry, I'm having a bit of trouble right now. Please try again in a moment, or type 'agent' to talk to someone.");
     }
@@ -518,11 +521,12 @@ export class MessengerService {
     }
 
     const message = `${greeting}Welcome to our Starlink Billing Assistance Service.
-
+    
 Just so you know, we're an independent third-party service - not affiliated with Starlink or SpaceX directly. We're here to help make your billing process smoother.
-
+    
 What can I help you with today?`;
 
+    this.logger.log(`Invent: sending welcome message to ${customer.messengerPsid}`);
     await this.messagingService.sendMessage(customer.messengerPsid, message);
     await this.messagingService.sendQuickReplies(customer.messengerPsid, 'Please select an option:', [
       { title: 'Submit Payment', payload: 'START_BILLING' },
@@ -530,6 +534,7 @@ What can I help you with today?`;
       { title: 'FAQ', payload: 'FAQ' },
       { title: 'Talk to Agent', payload: 'ESCALATE' },
     ]);
+    this.logger.log(`Invent: welcome message sent to ${customer.messengerPsid}`);
   }
 
   private async startBillingFlow(customer: any, context?: CustomerContext) {

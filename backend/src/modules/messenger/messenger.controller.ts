@@ -3,6 +3,7 @@ import { ApiTags, ApiOperation } from '@nestjs/swagger';
 import { MessengerService } from './messenger.service';
 import { Public } from '../../common/decorators/public.decorator';
 import { PrismaService } from '../../config/prisma.service';
+import { SettingsService } from '../settings/settings.service';
 
 @ApiTags('messenger')
 @Controller()
@@ -10,6 +11,7 @@ export class MessengerController {
   constructor(
     private readonly messengerService: MessengerService,
     private readonly prisma: PrismaService,
+    private readonly settingsService: SettingsService,
   ) {}
 
   @Get('messenger/webhook')
@@ -30,6 +32,11 @@ export class MessengerController {
   @ApiOperation({ summary: 'Messenger webhook events' })
   async handleWebhook(@Body() body: any) {
     if (body.object !== 'page') return;
+
+    const provider = await this.settingsService.get('messenger', 'provider');
+    if (provider === 'invent') {
+      return 'EVENT_RECEIVED';
+    }
 
     for (const entry of body.entry || []) {
       for (const event of entry.messaging || []) {

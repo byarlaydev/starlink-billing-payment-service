@@ -92,9 +92,13 @@ export class CustomersService {
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: { createdAt: 'desc' },
+        orderBy: [
+          { conversationContext: { lastActiveAt: { sort: 'desc', nulls: 'last' } } },
+          { createdAt: 'desc' },
+        ],
         include: {
           _count: { select: { billingRequests: true, conversations: true, starlinkAccounts: true } },
+          conversationContext: { select: { lastActiveAt: true } },
         },
       }),
       this.prisma.customer.count({ where }),
@@ -252,9 +256,17 @@ export class CustomersService {
     isAdminTakeover?: boolean;
     adminId?: string;
   }) {
-    return this.prisma.messengerConversation.create({
-      data: { customerId, ...data },
-    });
+    const [conversation] = await this.prisma.$transaction([
+      this.prisma.messengerConversation.create({
+        data: { customerId, ...data },
+      }),
+      this.prisma.conversationContext.upsert({
+        where: { customerId },
+        update: { lastActiveAt: new Date() },
+        create: { customerId, lastActiveAt: new Date() },
+      }),
+    ]);
+    return conversation;
   }
 
   async getConversationContext(customerId: string) {

@@ -122,6 +122,7 @@ model Customer {
   takeoverAdminId  String?
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
+  lastActivityAt   DateTime           @default(now())
 
   billingRequests  BillingRequest[]
   conversations    MessengerConversation[]

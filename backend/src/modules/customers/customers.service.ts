@@ -92,13 +92,9 @@ export class CustomersService {
         where,
         skip: (page - 1) * limit,
         take: limit,
-        orderBy: [
-          { conversationContext: { lastActiveAt: { sort: 'desc', nulls: 'last' } } },
-          { createdAt: 'desc' },
-        ],
+        orderBy: { lastActivityAt: 'desc' },
         include: {
           _count: { select: { billingRequests: true, conversations: true, starlinkAccounts: true } },
-          conversationContext: { select: { lastActiveAt: true } },
         },
       }),
       this.prisma.customer.count({ where }),
@@ -260,10 +256,9 @@ export class CustomersService {
       this.prisma.messengerConversation.create({
         data: { customerId, ...data },
       }),
-      this.prisma.conversationContext.upsert({
-        where: { customerId },
-        update: { lastActiveAt: new Date() },
-        create: { customerId, lastActiveAt: new Date() },
+      this.prisma.customer.update({
+        where: { id: customerId },
+        data: { lastActivityAt: new Date() },
       }),
     ]);
     return conversation;

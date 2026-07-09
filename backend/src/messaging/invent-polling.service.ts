@@ -117,13 +117,31 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     const newMessages = await this.filterUnprocessedMessages(messages);
     this.logger.debug(`Chat ${chatId}: ${newMessages.length} new messages`);
 
+    if (newMessages.length > 0) {
+      const sample = JSON.stringify(newMessages[0]).substring(0, 500);
+      this.logger.debug(`Chat ${chatId}: first new message keys=${Object.keys(newMessages[0]).join(',')}, structure=${sample}`);
+    }
+
     if (newMessages.length === 0) return;
 
     const byCreation = (a: any, b: any) =>
       new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
 
+    // Log first few messages that fail hasUserRole for debugging
+    const nonUserMsg = newMessages.find((m: any) => !this.hasUserRole(m));
+    if (nonUserMsg) {
+      this.logger.warn(`Chat ${chatId}: sample non-user msg keys=${Object.keys(nonUserMsg).join(',')}, role=${nonUserMsg.role}, hasMessages=${!!nonUserMsg.messages}, sample=${JSON.stringify(nonUserMsg).substring(0, 300)}`);
+    }
+
     const textMessages = newMessages
-      .filter((m: any) => this.hasUserRole(m) && this.extractMessageText(m))
+      .filter((m: any) => {
+        const isUser = this.hasUserRole(m);
+        const text = this.extractMessageText(m);
+        if (isUser && !text) {
+          this.logger.warn(`Chat ${chatId}: user message ${m.id} has no extractable text, keys=${Object.keys(m).join(',')}, msgs=${JSON.stringify(m.messages).substring(0, 200)}`);
+        }
+        return isUser && text;
+      })
       .sort(byCreation);
 
     const nonTextMessages = newMessages

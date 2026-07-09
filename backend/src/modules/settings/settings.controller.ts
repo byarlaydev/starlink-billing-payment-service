@@ -2,6 +2,7 @@ import { Controller, Get, Put, Post, Body, Param, UseGuards, Request } from '@ne
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { SettingsService } from './settings.service';
 import { InventPollingService } from '../../messaging/invent-polling.service';
+import { AutoResolveService } from '../../messaging/auto-resolve.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../common/guards/roles.guard';
 import { Roles } from '../../common/decorators/roles.decorator';
@@ -15,6 +16,7 @@ export class SettingsController {
   constructor(
     private readonly settingsService: SettingsService,
     private readonly inventPollingService: InventPollingService,
+    private readonly autoResolveService: AutoResolveService,
   ) {}
 
   @Get()
@@ -44,6 +46,7 @@ export class SettingsController {
     if (category === 'messenger') {
       this.settingsService.clearCache();
       await this.inventPollingService.restartPolling();
+      await this.autoResolveService.restart();
     }
 
     return result;
@@ -64,5 +67,20 @@ export class SettingsController {
     return {
       lastPollTime: this.inventPollingService.getLastPollTime(),
     };
+  }
+
+  @Post('messenger/auto-resolve/run')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Manually trigger auto-resolve' })
+  async runAutoResolve() {
+    const result = await this.autoResolveService.runNow();
+    return { success: true, ...result };
+  }
+
+  @Get('messenger/auto-resolve/status')
+  @Roles(Role.SUPER_ADMIN, Role.ADMIN)
+  @ApiOperation({ summary: 'Get auto-resolve service status' })
+  async getAutoResolveStatus() {
+    return this.autoResolveService.getStatus();
   }
 }

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { getErrorMessage } from '@/lib/error-utils';
-import { Save, Key, MessageSquare, Bot, HardDrive, Globe, Loader2, RefreshCw, CheckCircle2, Circle } from 'lucide-react';
+import { Save, Key, MessageSquare, Bot, HardDrive, Globe, Loader2, RefreshCw, CheckCircle2, Circle, Clock, Play } from 'lucide-react';
 import { Select } from '@/components/ui/select';
 
 interface SettingGroup {
@@ -85,6 +85,8 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [pollingStatus, setPollingStatus] = useState<any>(null);
   const [restarting, setRestarting] = useState(false);
+  const [autoResolveStatus, setAutoResolveStatus] = useState<any>(null);
+  const [runningAutoResolve, setRunningAutoResolve] = useState(false);
 
   useEffect(() => {
     const fetchSettings = async () => {
@@ -116,6 +118,14 @@ export default function SettingsPage() {
         const providerVal = editValues['messenger:provider'];
         if (providerVal !== undefined && !/^[•*\u2022]+$/.test(providerVal)) {
           messengerUpdates.provider = providerVal;
+        }
+        const autoResolveEnabled = editValues['messenger:auto_resolve_enabled'];
+        if (autoResolveEnabled !== undefined) {
+          messengerUpdates.auto_resolve_enabled = autoResolveEnabled;
+        }
+        const autoResolveHours = editValues['messenger:auto_resolve_hours'];
+        if (autoResolveHours !== undefined && !/^[•*\u2022]+$/.test(autoResolveHours)) {
+          messengerUpdates.auto_resolve_hours = autoResolveHours;
         }
         inventFields.forEach(f => {
           const val = editValues[`messenger:${f.key}`];
@@ -165,6 +175,9 @@ export default function SettingsPage() {
       api.get('/settings/messenger/polling/status')
         .then(res => setPollingStatus(res.data.data))
         .catch(() => {});
+      api.get('/settings/messenger/auto-resolve/status')
+        .then(res => setAutoResolveStatus(res.data.data))
+        .catch(() => {});
     }
   }, [activeTab]);
 
@@ -179,6 +192,21 @@ export default function SettingsPage() {
       toast.error('Failed to restart polling');
     } finally {
       setRestarting(false);
+    }
+  };
+
+  const handleRunAutoResolve = async () => {
+    setRunningAutoResolve(true);
+    try {
+      const res = await api.post('/settings/messenger/auto-resolve/run');
+      const { resolved } = res.data.data;
+      toast.success(resolved > 0 ? `Auto-resolved ${resolved} conversation${resolved > 1 ? 's' : ''}` : 'No stale conversations to resolve');
+      const statusRes = await api.get('/settings/messenger/auto-resolve/status');
+      setAutoResolveStatus(statusRes.data.data);
+    } catch {
+      toast.error('Failed to run auto-resolve');
+    } finally {
+      setRunningAutoResolve(false);
     }
   };
 
@@ -332,6 +360,65 @@ export default function SettingsPage() {
                   </div>
                 </div>
               )}
+
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className="h-px flex-1 bg-card-border" />
+                  <span className="text-xs font-medium text-foreground opacity-40 uppercase tracking-wide">Auto-Resolve</span>
+                  <div className="h-px flex-1 bg-card-border" />
+                </div>
+                <p className="text-xs text-foreground opacity-50">
+                  Automatically close stale conversations after a period of inactivity. Sends a friendly farewell message and resets the conversation state.
+                </p>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Enable Auto-Resolve</label>
+                    <Select
+                      value={editValues['messenger:auto_resolve_enabled'] || 'false'}
+                      onChange={(value) => setEditValues({ ...editValues, 'messenger:auto_resolve_enabled': value })}
+                      options={[
+                        { value: 'true', label: 'Enabled' },
+                        { value: 'false', label: 'Disabled' },
+                      ]}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-foreground mb-1">Inactivity Threshold (hours)</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="720"
+                      value={editValues['messenger:auto_resolve_hours'] || '24'}
+                      onChange={(e) => setEditValues({ ...editValues, 'messenger:auto_resolve_hours': e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                    />
+                    <p className="text-xs text-foreground opacity-40 mt-1">Conversations inactive longer than this will be closed</p>
+                  </div>
+                </div>
+                <div className="p-4 bg-card-hover rounded-xl">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Clock className="w-4 h-4 text-foreground opacity-40" />
+                      <div>
+                        <p className="text-sm font-medium text-foreground">Auto-Resolve Status</p>
+                        <p className="text-xs text-foreground opacity-50 mt-0.5">
+                          Last run: {autoResolveStatus?.lastRunTime
+                            ? `${new Date(autoResolveStatus.lastRunTime).toLocaleString()} — resolved ${autoResolveStatus.lastResolvedCount || 0}`
+                            : 'Never run'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={handleRunAutoResolve}
+                      disabled={runningAutoResolve}
+                      className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-primary-700 bg-primary-50 rounded-lg hover:bg-primary-100 disabled:opacity-50 transition-colors"
+                    >
+                      {runningAutoResolve ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Play className="w-3.5 h-3.5" />}
+                      Run Now
+                    </button>
+                  </div>
+                </div>
+              </div>
 
               <div className="pt-4 border-t border-card-border">
                 <button

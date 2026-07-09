@@ -10,6 +10,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
   private intervalId: NodeJS.Timeout | null = null;
   private isPolling = false;
   private lastPollTime: Date | null = null;
+  private recentMessageIds = new Set<string>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -169,13 +170,23 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
 
     if (textMessages.length === 0) return;
 
+    // Dedup: skip messages we've already seen in the last ~minute
+    const deduped = textMessages.filter(m => !this.recentMessageIds.has(m.id));
+    if (deduped.length === 0) return;
+
+    // Prune old entries
+    if (this.recentMessageIds.size > 100) {
+      this.recentMessageIds.clear();
+    }
+
     // Only process the most recent text message — skip historical ones
     // to avoid flooding the user with responses to every past message
-    const latestMsg = textMessages[textMessages.length - 1];
-    const skippedCount = textMessages.length - 1;
+    const latestMsg = deduped[deduped.length - 1];
+    const skippedCount = deduped.length - 1;
 
-    for (const msg of textMessages.slice(0, skippedCount)) {
+    for (const msg of deduped.slice(0, skippedCount)) {
       const text = this.extractMessageText(msg);
+      this.recentMessageIds.add(msg.id);
       try {
         await this.prisma.webhookEvent.create({
           data: {
@@ -198,6 +209,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     if (!text) return;
 
     const messageId = latestMsg.id;
+    this.recentMessageIds.add(messageId);
 
     const existing = await this.prisma.webhookEvent.findUnique({
       where: { eventId: `invent_${messageId}` },
@@ -224,6 +236,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
       });
 
       this.logger.log(`Processed Invent message ${messageId} from ${psid}`);
+      this.recentMessageIds.add(messageId);
     } catch (error) {
       this.logger.error(`Failed to process Invent message ${messageId}`, error);
       await this.prisma.webhookEvent.update({

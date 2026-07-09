@@ -113,6 +113,7 @@ model Customer {
   conversationState ConversationState @default(IDLE)
   isActive         Boolean            @default(true)
   dataCollectedBy  String             @default("bot")
+  channel          String             @default("messenger")
   reviewStatus     DataReviewStatus   @default(PENDING_REVIEW)
   reviewedBy       String?
   reviewedAt       DateTime?
@@ -187,15 +188,17 @@ model StarlinkRegionAndPlan {
 // ============================================
 
 model ConversationContext {
-  id            String   @id @default(uuid())
-  customerId    String   @unique
-  customer      Customer @relation(fields: [customerId], references: [id])
-  sessionStep   String   @default("greeting")
-  collectedData Json     @default("{}")
-  recentMessages Json    @default("[]")
-  lastActiveAt  DateTime @default(now())
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  id                String    @id @default(uuid())
+  customerId        String    @unique
+  customer          Customer  @relation(fields: [customerId], references: [id])
+  sessionStep       String    @default("greeting")
+  collectedData     Json      @default("{}")
+  recentMessages    Json      @default("[]")
+  lastActiveAt      DateTime  @default(now())
+  followUpCount     Int       @default(0)
+  scheduledFollowUpAt DateTime?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   @@map("conversation_contexts")
 }

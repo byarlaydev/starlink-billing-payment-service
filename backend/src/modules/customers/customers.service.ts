@@ -12,13 +12,14 @@ export class CustomersService {
     return this.prisma.customer.findUnique({ where: { messengerPsid: psid } });
   }
 
-  async findOrCreate(psid: string, facebookName?: string) {
+  async findOrCreate(psid: string, facebookName?: string, channel?: string) {
     let customer = await this.findByPsid(psid);
     if (!customer) {
       customer = await this.prisma.customer.create({
         data: {
           messengerPsid: psid,
           facebookName: facebookName || null,
+          channel: channel || 'messenger',
           dataCollectedBy: 'bot',
           reviewStatus: 'PENDING_REVIEW',
         },

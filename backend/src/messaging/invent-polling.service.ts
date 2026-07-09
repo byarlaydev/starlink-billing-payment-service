@@ -92,6 +92,7 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
         data: {
           messengerPsid: psid,
           inventChatId: chatId,
+          channel: 'invent',
           facebookName: contactChannel.name || null,
           fullName: contactChannel.name || null,
           contactNumber: contactChannel.phone || null,

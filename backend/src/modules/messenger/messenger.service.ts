@@ -56,8 +56,8 @@ export class MessengerService {
     private readonly messagingService: MessagingService,
   ) {}
 
-  private async loadFullCustomerContext(customerId: string, psid: string): Promise<CustomerContext> {
-    const customer = await this.customersService.findOrCreate(psid);
+  private async loadFullCustomerContext(customerId: string, psid: string, channel?: string): Promise<CustomerContext> {
+    const customer = await this.customersService.findOrCreate(psid, undefined, channel);
     
     const [conversationHistory, billingHistory, conversationContext, starlinkAccounts] = await Promise.all([
       this.customersService.getConversations(customer.id, 20),
@@ -140,7 +140,7 @@ export class MessengerService {
   }
 
   async handleInventInbound(psid: string, text: string) {
-    const context = await this.loadFullCustomerContext(psid, psid);
+    const context = await this.loadFullCustomerContext(psid, psid, 'invent');
     const customer = context.customer;
 
     if (customer.isAdminTakeover) {
@@ -183,7 +183,7 @@ export class MessengerService {
     const psid = event.sender.id;
     const message = event.message!;
     
-    const context = await this.loadFullCustomerContext(psid, psid);
+    const context = await this.loadFullCustomerContext(psid, psid, 'messenger');
     const customer = context.customer;
 
     if (customer.isAdminTakeover) {
@@ -237,7 +237,7 @@ export class MessengerService {
 
   private async handlePostback(event: MessengerEvent) {
     const psid = event.sender.id;
-    const context = await this.loadFullCustomerContext(psid, psid);
+    const context = await this.loadFullCustomerContext(psid, psid, 'messenger');
     const customer = context.customer;
     const payload = event.postback!.payload;
 

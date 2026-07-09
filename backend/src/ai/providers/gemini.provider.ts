@@ -29,7 +29,7 @@ export class GeminiProvider implements AIProvider {
 
   private getConfig(): AIProviderConfig {
     return {
-      apiKey: this.configService.get<string>('GEMINI_API_KEY', ''),
+      apiKey: this.currentApiKey || this.configService.get<string>('GEMINI_API_KEY', ''),
       model: this.configService.get<string>('GEMINI_MODEL', 'gemini-2.5-flash'),
       temperature: parseFloat(this.configService.get<string>('GEMINI_TEMPERATURE', '0.3')),
       maxOutputTokens: parseInt(this.configService.get<string>('GEMINI_MAX_OUTPUT_TOKENS', '4096'), 10),

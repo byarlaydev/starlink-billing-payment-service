@@ -141,6 +141,12 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
         if (isUser && !text) {
           this.logger.warn(`Chat ${chatId}: user message ${m.id} has no extractable text, keys=${Object.keys(m).join(',')}, msgs=${JSON.stringify(m.messages).substring(0, 200)}`);
         }
+        // Log sender info for the first text message to identify the sender field
+        if (isUser && text) {
+          const senderFields = ['sender_id','senderId','from_id','fromId','user_id','userId','author_id','authorId','sender','from','created_by'];
+          const found = senderFields.filter(f => m[f] !== undefined).map(f => `${f}=${m[f]}`);
+          this.logger.warn(`Chat ${chatId}: msg ${m.id} sender info: [${found.join(', ')}] customerPsid=${psid}`);
+        }
         return isUser && text;
       })
       .sort(byCreation);
@@ -259,6 +265,14 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     }
     this.logger.debug(`Chat ${chat.id}: no MEMBER with contact_channel found, members: ${JSON.stringify(chat.members.map((m: any) => ({ role: m.role, hasChannel: !!m.contact_channel })))}`);
     return null;
+  }
+
+  private isMessageFromCustomer(msg: any, customerPsid: string): boolean {
+    // Check various possible sender field names
+    const senderId = msg.sender_id || msg.senderId || msg.from_id || msg.fromId || msg.user_id || msg.userId || msg.author_id || msg.authorId;
+    if (senderId && senderId !== customerPsid) return false;
+    // If no sender field found, fall back to role-based detection
+    return this.hasUserRole(msg);
   }
 
   private extractMessageText(msg: any): string | null {

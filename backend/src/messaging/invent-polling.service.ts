@@ -117,49 +117,75 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     const newMessages = await this.filterUnprocessedMessages(messages);
     this.logger.debug(`Chat ${chatId}: ${newMessages.length} new messages`);
 
-    for (const msg of newMessages) {
-      if (msg.role !== 'user') continue;
+    if (newMessages.length === 0) return;
 
+    const userMessages = newMessages
+      .filter((m: any) => m.role === 'user' && this.extractMessageText(m))
+      .sort((a: any, b: any) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime());
+
+    if (userMessages.length === 0) return;
+
+    // Only process the most recent user message — skip historical ones
+    // to avoid flooding the user with responses to every past message
+    const latestMsg = userMessages[userMessages.length - 1];
+    const skippedCount = userMessages.length - 1;
+
+    for (const msg of userMessages.slice(0, skippedCount)) {
       const text = this.extractMessageText(msg);
-      if (!text) {
-        this.logger.warn(`Chat ${chatId}: could not extract text from message ${msg.id}, structure: ${JSON.stringify(msg).substring(0, 200)}`);
-        continue;
-      }
-
-      const messageId = msg.id;
-
-      const existing = await this.prisma.webhookEvent.findUnique({
-        where: { eventId: `invent_${messageId}` },
-      });
-      if (existing) continue;
-
-      await this.prisma.webhookEvent.create({
-        data: {
-          eventId: `invent_${messageId}`,
-          source: 'invent',
-          payload: { chatId, messageId, text, senderPsid: psid, customerId: customer.id },
-          processed: false,
-        },
-      });
-
       try {
-        const { MessengerService } = await import('../modules/messenger/messenger.service');
-        const messengerService = this.moduleRef.get(MessengerService, { strict: false });
-        await messengerService.handleInventInbound(psid, text);
-
-        await this.prisma.webhookEvent.update({
-          where: { eventId: `invent_${messageId}` },
-          data: { processed: true, processedAt: new Date() },
+        await this.prisma.webhookEvent.create({
+          data: {
+            eventId: `invent_${msg.id}`,
+            source: 'invent',
+            payload: { chatId, messageId: msg.id, text, senderPsid: psid, customerId: customer.id },
+            processed: true,
+          },
         });
-
-        this.logger.log(`Processed Invent message ${messageId} from ${psid}`);
-      } catch (error) {
-        this.logger.error(`Failed to process Invent message ${messageId}`, error);
-        await this.prisma.webhookEvent.update({
-          where: { eventId: `invent_${messageId}` },
-          data: { processed: true, processedAt: new Date() },
-        });
+      } catch {
+        // ignore duplicate key errors
       }
+    }
+
+    if (skippedCount > 0) {
+      this.logger.log(`Skipped ${skippedCount} historical messages for chat ${chatId}, processing only the most recent`);
+    }
+
+    const text = this.extractMessageText(latestMsg);
+    if (!text) return;
+
+    const messageId = latestMsg.id;
+
+    const existing = await this.prisma.webhookEvent.findUnique({
+      where: { eventId: `invent_${messageId}` },
+    });
+    if (existing) return;
+
+    await this.prisma.webhookEvent.create({
+      data: {
+        eventId: `invent_${messageId}`,
+        source: 'invent',
+        payload: { chatId, messageId, text, senderPsid: psid, customerId: customer.id },
+        processed: false,
+      },
+    });
+
+    try {
+      const { MessengerService } = await import('../modules/messenger/messenger.service');
+      const messengerService = this.moduleRef.get(MessengerService, { strict: false });
+      await messengerService.handleInventInbound(psid, text);
+
+      await this.prisma.webhookEvent.update({
+        where: { eventId: `invent_${messageId}` },
+        data: { processed: true, processedAt: new Date() },
+      });
+
+      this.logger.log(`Processed Invent message ${messageId} from ${psid}`);
+    } catch (error) {
+      this.logger.error(`Failed to process Invent message ${messageId}`, error);
+      await this.prisma.webhookEvent.update({
+        where: { eventId: `invent_${messageId}` },
+        data: { processed: true, processedAt: new Date() },
+      });
     }
   }
 

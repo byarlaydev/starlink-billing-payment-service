@@ -118,35 +118,17 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     const newMessages = await this.filterUnprocessedMessages(messages);
     this.logger.debug(`Chat ${chatId}: ${newMessages.length} new messages`);
 
-    if (newMessages.length > 0) {
-      const sample = JSON.stringify(newMessages[0]).substring(0, 800);
-      this.logger.warn(`Chat ${chatId}: FULL first new msg keys=${Object.keys(newMessages[0]).join(',')}, structure=${sample}`);
-    }
-
     if (newMessages.length === 0) return;
 
     const byCreation = (a: any, b: any) =>
       new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime();
 
-    // Log first few messages that fail hasUserRole for debugging
-    const nonUserMsg = newMessages.find((m: any) => !this.hasUserRole(m));
-    if (nonUserMsg) {
-      this.logger.warn(`Chat ${chatId}: sample non-user msg keys=${Object.keys(nonUserMsg).join(',')}, role=${nonUserMsg.role}, hasMessages=${!!nonUserMsg.messages}, sample=${JSON.stringify(nonUserMsg).substring(0, 300)}`);
-    }
-
     const textMessages = newMessages
       .filter((m: any) => {
+        // Skip AI-generated messages (have a 'model' field - UseInvent marks bot replies this way)
+        if (m.model) return false;
         const isUser = this.hasUserRole(m);
         const text = this.extractMessageText(m);
-        if (isUser && !text) {
-          this.logger.warn(`Chat ${chatId}: user message ${m.id} has no extractable text, keys=${Object.keys(m).join(',')}, msgs=${JSON.stringify(m.messages).substring(0, 200)}`);
-        }
-        // Log sender info for the first text message to identify the sender field
-        if (isUser && text) {
-          const senderFields = ['sender_id','senderId','from_id','fromId','user_id','userId','author_id','authorId','sender','from','created_by'];
-          const found = senderFields.filter(f => m[f] !== undefined).map(f => `${f}=${m[f]}`);
-          this.logger.warn(`Chat ${chatId}: msg ${m.id} sender info: [${found.join(', ')}] customerPsid=${psid}`);
-        }
         return isUser && text;
       })
       .sort(byCreation);
@@ -265,14 +247,6 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
     }
     this.logger.debug(`Chat ${chat.id}: no MEMBER with contact_channel found, members: ${JSON.stringify(chat.members.map((m: any) => ({ role: m.role, hasChannel: !!m.contact_channel })))}`);
     return null;
-  }
-
-  private isMessageFromCustomer(msg: any, customerPsid: string): boolean {
-    // Check various possible sender field names
-    const senderId = msg.sender_id || msg.senderId || msg.from_id || msg.fromId || msg.user_id || msg.userId || msg.author_id || msg.authorId;
-    if (senderId && senderId !== customerPsid) return false;
-    // If no sender field found, fall back to role-based detection
-    return this.hasUserRole(msg);
   }
 
   private extractMessageText(msg: any): string | null {

@@ -222,9 +222,8 @@ export class InventPollingService implements OnModuleInit, OnModuleDestroy {
       if (m.role !== 'user') continue;
       if (!m.parts || !Array.isArray(m.parts)) continue;
       for (const part of m.parts) {
-        if (part.type === 'text' && part.text) {
-          return part.text;
-        }
+        if (part.type === 'text' && part.text) return part.text;
+        if (part.type === 'option_selected') return part.value || part.label || null;
       }
     }
     return null;
